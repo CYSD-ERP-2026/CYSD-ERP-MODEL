@@ -15,7 +15,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from .models import Domain, Employee, Meeting
+from .models import Domain, Employee, Meeting, Project, Task
 
 
 # ===========================================================================
@@ -218,3 +218,89 @@ class MeetingAdmin(ModelAdmin):
     def mark_cancelled(self, request, queryset):
         updated = queryset.update(status='cancelled')
         self.message_user(request, f'{updated} meeting(s) marked as cancelled.')
+
+
+# ===========================================================================
+# Project Admin
+# ===========================================================================
+
+@admin.register(Project)
+class ProjectAdmin(ModelAdmin):
+    list_display = ('title', 'domain', 'start_date', 'deadline', 'status_badge', 'lead_employee')
+    list_filter = ('status', 'domain', 'start_date', 'deadline')
+    search_fields = ('title', 'domain__name', 'lead_employee__name')
+    autocomplete_fields = ('domain', 'lead_employee')
+    ordering = ('deadline', 'title')
+    readonly_fields = ('created_at', 'updated_at')
+
+    fieldsets = (
+        ('Project details', {
+            'fields': ('title', 'domain', 'status', 'lead_employee'),
+        }),
+        ('Schedule', {
+            'fields': ('start_date', 'deadline'),
+        }),
+        ('Record Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colours = {
+            'planning': '#1565c0',
+            'active': '#2e7d32',
+            'completed': '#4a148c',
+            'delayed': '#c62828',
+        }
+        colour = colours.get(obj.status, '#616161')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:bold;">{}</span>',
+            colour,
+            obj.get_status_display(),
+        )
+
+
+# ===========================================================================
+# Task Admin
+# ===========================================================================
+
+@admin.register(Task)
+class TaskAdmin(ModelAdmin):
+    list_display = ('title', 'project', 'assigned_to', 'due_date', 'status_badge', 'hours_logged')
+    list_filter = ('status', 'project', 'assigned_to', 'due_date')
+    search_fields = ('title', 'project__title', 'assigned_to__name')
+    autocomplete_fields = ('project', 'assigned_to')
+    ordering = ('due_date', 'title')
+    readonly_fields = ('created_at', 'updated_at')
+
+    fieldsets = (
+        ('Task details', {
+            'fields': ('title', 'project', 'assigned_to', 'status', 'hours_logged'),
+        }),
+        ('Schedule', {
+            'fields': ('due_date',),
+        }),
+        ('Record Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colours = {
+            'pending': '#1565c0',
+            'in_progress': '#e65100',
+            'completed': '#2e7d32',
+            'overdue': '#c62828',
+        }
+        colour = colours.get(obj.status, '#616161')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:bold;">{}</span>',
+            colour,
+            obj.get_status_display(),
+        )

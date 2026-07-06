@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}Employee Analytics{% endblock %}
+
+{% block content %}
+<!-- Top bar -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-people-fill me-2"></i>Employee Workload &amp; Performance</h4>
+    <span class="meta">Monitor staff workload levels, deadlines, and task completion efficiency</span>
+  </div>
+</div>
+
+<!-- Graphs row -->
+<div class="row g-4 mb-4">
+  <!-- Workload Chart -->
+  <div class="col-12 col-lg-7">
+    <div class="chart-card h-100">
+      <div class="card-title">
+        <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
+        Active Task Workload per Employee
+      </div>
+      <div class="text-center py-2">
+        {% if workload_chart %}
+          <img src="data:image/png;base64,{{ workload_chart }}" alt="Employee Active Workloads" class="img-fluid rounded" style="max-height: 380px;" />
+        {% else %}
+          <div class="py-5 text-muted">
+            <i class="bi bi-clipboard2-check fs-1 mb-3"></i>
+            <p>No active/pending tasks are currently assigned to employees.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Efficiency Chart -->
+  <div class="col-12 col-lg-5">
+    <div class="chart-card h-100">
+      <div class="card-title">
+        <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
+        Completion Efficiency: Completed vs. Overdue
+      </div>
+      <div class="text-center py-2">
+        {% if efficiency_chart %}
+          <img src="data:image/png;base64,{{ efficiency_chart }}" alt="Task Completion Efficiency" class="img-fluid rounded" style="max-height: 380px;" />
+          <div class="mt-2 fw-semibold text-secondary" style="font-size: 0.9rem;">
+            Overall On-Time Efficiency Rate: <span class="text-success">{{ efficiency_percentage }}%</span>
+          </div>
+        {% else %}
+          <div class="py-5 text-muted">
+            <i class="bi bi-pie-chart fs-1 mb-3"></i>
+            <p>No completed or overdue tasks exist to calculate efficiency.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="table-card">
+  <div class="table-header">
+    <h6><i class="bi bi-table me-1"></i> Staff Workload Registry &amp; Deadlines</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Employee Name</th>
+          <th>Designation</th>
+          <th>Primary Domain</th>
+          <th class="text-center">Active Projects Led</th>
+          <th class="text-center">Active Tasks Assigned</th>
+          <th>Nearest Upcoming Deadline</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for data in employees_data %}
+        <tr>
+          <td class="fw-semibold text-dark">
+            <i class="bi bi-person-fill text-secondary me-1"></i>{{ data.employee.name }}
+          </td>
+          <td>{{ data.employee.designation }}</td>
+          <td>
+            {% if data.employee.domain %}
+              <span class="badge bg-light text-dark border">{{ data.employee.domain.name }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3">
+              {{ data.active_projects_led }}
+            </span>
+          </td>
+          <td class="text-center">
+            <span class="badge bg-info-subtle text-info border border-info-subtle fw-bold rounded-pill px-3">
+              {{ data.active_tasks }}
+            </span>
+          </td>
+          <td>
+            {% if "No upcoming" in data.upcoming_deadline %}
+              <span class="text-muted"><i class="bi bi-dash-circle me-1"></i>None</span>
+            {% elif "Overdue" in data.upcoming_deadline or "Task:" in data.upcoming_deadline %}
+              <span class="text-danger fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>{{ data.upcoming_deadline }}</span>
+            {% else %}
+              <span class="text-dark fw-medium"><i class="bi bi-alarm me-1 text-secondary"></i>{{ data.upcoming_deadline }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/admin/tracker/task/add/?assigned_to={{ data.employee.id }}" class="btn btn-sm btn-outline-primary" style="font-size: .8rem;">
+              <i class="bi bi-plus-lg"></i> Assign Task
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-4">
+            No active staff or employees found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

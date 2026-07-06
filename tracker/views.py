@@ -15,7 +15,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import Domain, Employee, Meeting
+from .models import Domain, Employee, Meeting, Project, Task
 
 
 @login_required
@@ -241,3 +241,121 @@ def policy_analytics_view(request):
         'generated_at': timezone.now(),
     }
     return render(request, 'analytics.html', context)
+
+
+@login_required
+def employee_performance_view(request):
+    """View to analyze employee workloads and task efficiency using Pandas and Matplotlib."""
+    # Query all tasks
+    tasks_qs = Task.objects.select_related('assigned_to', 'project').values(
+        'id', 'title', 'assigned_to__name', 'status', 'due_date', 'hours_logged'
+    )
+    df_tasks = pd.DataFrame(list(tasks_qs))
+
+    workload_chart = ""
+    efficiency_chart = ""
+    efficiency_percentage = 0.0
+
+    if not df_tasks.empty:
+        # Fill missing employee names
+        df_tasks['assigned_to__name'] = df_tasks['assigned_to__name'].fillna('Unassigned')
+
+        # 1. Workload Chart: Horizontal bar chart of active tasks per employee
+        df_workload = df_tasks[df_tasks['status'].isin(['pending', 'in_progress'])]
+        if not df_workload.empty:
+            workload_series = df_workload.groupby('assigned_to__name').size().sort_values()
+            
+            fig, ax = plt.subplots(figsize=(6, 4))
+            workload_series.plot(kind='barh', ax=ax, color='#0a7e8c', edgecolor='none')
+            ax.set_title('Active Workload (Pending & In Progress Tasks)', fontsize=12, fontweight='bold', pad=12, color='#0d2b55')
+            ax.set_xlabel('Number of Tasks', fontsize=10, fontweight='semibold')
+            ax.set_ylabel('Employee', fontsize=10, fontweight='semibold')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color('#cbd5e1')
+            ax.spines['bottom'].set_color('#cbd5e1')
+            ax.xaxis.grid(True, linestyle='--', alpha=0.5, color='#cbd5e1')
+            ax.set_axisbelow(True)
+            plt.tight_layout()
+            
+            # Save to buffer
+            buf1 = io.BytesIO()
+            plt.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
+            buf1.seek(0)
+            workload_chart = base64.b64encode(buf1.getvalue()).decode('utf-8')
+            buf1.close()
+            plt.close(fig)
+
+        # 2. Efficiency Chart: Pie chart of Completed vs Overdue
+        completed_count = len(df_tasks[df_tasks['status'] == 'completed'])
+        overdue_count = len(df_tasks[df_tasks['status'] == 'overdue'])
+        
+        if completed_count + overdue_count > 0:
+            efficiency_percentage = (completed_count / (completed_count + overdue_count)) * 100
+            
+            fig, ax = plt.subplots(figsize=(5, 4))
+            labels = ['Completed', 'Overdue']
+            sizes = [completed_count, overdue_count]
+            colors = ['#16a34a', '#dc2626'] # Green vs Red
+            
+            ax.pie(
+                sizes, 
+                labels=labels, 
+                autopct='%1.1f%%', 
+                startangle=90, 
+                colors=colors, 
+                textprops={'fontsize': 10, 'weight': 'semibold'},
+                wedgeprops={'edgecolor': '#fff', 'linewidth': 2}
+            )
+            ax.set_title('Task Completion Efficiency', fontsize=12, fontweight='bold', pad=12, color='#0d2b55')
+            plt.tight_layout()
+            
+            # Save to buffer
+            buf2 = io.BytesIO()
+            plt.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
+            buf2.seek(0)
+            efficiency_chart = base64.b64encode(buf2.getvalue()).decode('utf-8')
+            buf2.close()
+            plt.close(fig)
+
+    # Calculate employee stats for table
+    employees_data = []
+    employees = Employee.objects.filter(is_active=True).order_by('name')
+    for emp in employees:
+        led_count = Project.objects.filter(lead_employee=emp, status='active').count()
+        
+        emp_tasks = Task.objects.filter(assigned_to=emp)
+        active_tasks_count = emp_tasks.filter(status__in=['pending', 'in_progress']).count()
+        
+        # Deadlines list
+        deadlines = []
+        upcoming_task = emp_tasks.filter(status__in=['pending', 'in_progress', 'overdue']).order_by('due_date').first()
+        upcoming_project = Project.objects.filter(lead_employee=emp, status__in=['planning', 'active']).order_by('deadline').first()
+        
+        if upcoming_task:
+            deadlines.append((upcoming_task.due_date, f"Task: {upcoming_task.title}"))
+        if upcoming_project:
+            deadlines.append((upcoming_project.deadline, f"Project: {upcoming_project.title}"))
+            
+        if deadlines:
+            deadlines.sort(key=lambda x: x[0])
+            nearest_date, nearest_desc = deadlines[0]
+            deadline_display = f"{nearest_date.strftime('%d %b %Y')} ({nearest_desc})"
+        else:
+            deadline_display = "No upcoming deadlines"
+            
+        employees_data.append({
+            'employee': emp,
+            'active_projects_led': led_count,
+            'active_tasks': active_tasks_count,
+            'upcoming_deadline': deadline_display,
+        })
+
+    context = {
+        'workload_chart': workload_chart,
+        'efficiency_chart': efficiency_chart,
+        'efficiency_percentage': round(efficiency_percentage, 1),
+        'employees_data': employees_data,
+        'generated_at': timezone.now(),
+    }
+    return render(request, 'employee_analytics.html', context)

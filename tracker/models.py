@@ -294,3 +294,98 @@ class Meeting(models.Model):
     @property
     def attendee_count(self):
         return self.attendees.count()
+
+
+# ---------------------------------------------------------------------------
+# Project & Task (Employee Performance & Workload expansion)
+# ---------------------------------------------------------------------------
+
+PROJECT_STATUS_CHOICES = [
+    ('planning', 'Planning'),
+    ('active', 'Active'),
+    ('completed', 'Completed'),
+    ('delayed', 'Delayed'),
+]
+
+TASK_STATUS_CHOICES = [
+    ('pending', 'Pending'),
+    ('in_progress', 'In Progress'),
+    ('completed', 'Completed'),
+    ('overdue', 'Overdue'),
+]
+
+
+class Project(models.Model):
+    title = models.CharField(max_length=250, help_text="Title of the project")
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='projects',
+        help_text="Thematic domain this project belongs to"
+    )
+    start_date = models.DateField(default=timezone.now)
+    deadline = models.DateField(help_text="Project deadline date")
+    status = models.CharField(
+        max_length=20,
+        choices=PROJECT_STATUS_CHOICES,
+        default='planning'
+    )
+    lead_employee = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='led_projects',
+        help_text="Employee leading this project"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['deadline', 'title']
+        verbose_name = 'Project'
+        verbose_name_plural = 'Projects'
+
+    def __str__(self):
+        return f"{self.title} [{self.get_status_display()}]"
+
+
+class Task(models.Model):
+    title = models.CharField(max_length=250, help_text="Task description / title")
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        help_text="Project this task belongs to"
+    )
+    assigned_to = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        help_text="Employee assigned to this task"
+    )
+    due_date = models.DateField(help_text="Task due date")
+    status = models.CharField(
+        max_length=20,
+        choices=TASK_STATUS_CHOICES,
+        default='pending'
+    )
+    hours_logged = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0.0,
+        help_text="Hours logged on this task"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['due_date', 'title']
+        verbose_name = 'Task'
+        verbose_name_plural = 'Tasks'
+
+    def __str__(self):
+        return f"{self.title} – {self.assigned_to.name} [{self.get_status_display()}]"
+
