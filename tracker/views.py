@@ -68,6 +68,15 @@ def dashboard_view(request):
         .order_by('-date', '-start_time')[:10]
     )
 
+    # Mask sensitive details for HR role
+    recent_meetings = list(recent_meetings)
+    profile = getattr(request.user, 'employee_profile', None)
+    if profile and profile.role == 'hr':
+        for m in recent_meetings:
+            m.agenda = 'Confidential - Restructured Access'
+            m.minutes = 'Confidential - Restructured Access'
+            m.action_points = 'Confidential - Restructured Access'
+
     context = {
         # Summary cards
         'total_domains': total_domains,
@@ -164,9 +173,19 @@ def meetings_list_view(request):
         .order_by('-date', '-start_time')
     )
     meeting_filter = MeetingFilter(request.GET, queryset=qs)
+    meetings = list(meeting_filter.qs)
+
+    # Mask sensitive details for HR role
+    profile = getattr(request.user, 'employee_profile', None)
+    if profile and profile.role == 'hr':
+        for m in meetings:
+            m.agenda = 'Confidential - Restructured Access'
+            m.minutes = 'Confidential - Restructured Access'
+            m.action_points = 'Confidential - Restructured Access'
+
     context = {
         'filter': meeting_filter,
-        'meetings': meeting_filter.qs,
+        'meetings': meetings,
         'generated_at': timezone.now(),
     }
     return render(request, 'meetings.html', context)
@@ -198,35 +217,69 @@ def policy_analytics_view(request):
         crosstab = pd.crosstab(df['intervention_scale_label'], df['domain__name'])
         
         # Render crosstab to HTML table with clean Bootstrap classes
-        crosstab_html = crosstab.to_html(classes='table table-bordered table-striped table-hover table-sm mb-0')
+        crosstab_html = crosstab.to_html(classes='table table-borderless table-hover table-sm align-middle mb-0')
         
+        # ── Premium palette: slate blues + soft teals + muted corals ──
+        PREMIUM_PALETTE = [
+            '#2563eb', '#0891b2', '#0d9488', '#7c3aed',
+            '#db2777', '#ea580c', '#65a30d', '#ca8a04',
+        ]
+
+        # ── Global Matplotlib style ──────────────────────────────────
+        plt.rcParams.update({
+            'font.family': 'DejaVu Sans',  # closest to Inter available in Matplotlib
+            'font.size': 10,
+            'axes.facecolor': 'none',
+            'figure.facecolor': 'none',
+            'text.color': '#374151',
+            'axes.labelcolor': '#374151',
+            'xtick.color': '#64748b',
+            'ytick.color': '#64748b',
+        })
+
         # Matplotlib visualization (stacked bar chart)
         fig, ax = plt.subplots(figsize=(8, 5))
-        
-        # Plot stacked bar chart with viridis palette
-        crosstab.plot(kind='bar', stacked=True, ax=ax, colormap='viridis', edgecolor='none')
-        
-        ax.set_title('Policy Intervention Scales by Domain', fontsize=14, fontweight='bold', pad=15, color='#0d2b55')
-        ax.set_xlabel('Intervention Scale', fontsize=11, fontweight='semibold', labelpad=10)
-        ax.set_ylabel('Number of Meetings', fontsize=11, fontweight='semibold', labelpad=10)
-        
-        # Style layout and labels
-        plt.xticks(rotation=0)  # keep labels horizontal
+        fig.patch.set_alpha(0)
+
+        n_cols = len(crosstab.columns)
+        bar_colours = [PREMIUM_PALETTE[i % len(PREMIUM_PALETTE)] for i in range(n_cols)]
+
+        crosstab.plot(
+            kind='bar', stacked=True, ax=ax,
+            color=bar_colours, edgecolor='none', linewidth=0,
+        )
+
+        ax.set_title('Policy Intervention Scales by Domain',
+                     fontsize=13, fontweight='bold', pad=14, color='#0f172a')
+        ax.set_xlabel('Intervention Scale', fontsize=10, labelpad=8)
+        ax.set_ylabel('Number of Meetings', fontsize=10, labelpad=8)
+
+        plt.xticks(rotation=0, ha='center')
+
+        # Remove harsh borders
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#cbd5e1')
-        ax.spines['bottom'].set_color('#cbd5e1')
-        ax.yaxis.grid(True, linestyle='--', alpha=0.5, color='#cbd5e1')
+        ax.spines['left'].set_color('#e2e8f0')
+        ax.spines['bottom'].set_color('#e2e8f0')
+
+        # Soft y-axis only gridlines
+        ax.yaxis.grid(True, linestyle='--', linewidth=0.6, alpha=0.7, color='#e2e8f0')
+        ax.xaxis.grid(False)
         ax.set_axisbelow(True)
-        
-        # Add legend
-        ax.legend(title='Domain', frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
-        
+
+        # Refined legend
+        ax.legend(
+            title='Domain', title_fontsize=8,
+            fontsize=8, frameon=True,
+            facecolor='#ffffff', edgecolor='#e2e8f0',
+            framealpha=0.9,
+        )
+
         plt.tight_layout()
-        
-        # Save plot to BytesIO buffer
+
+        # Save with transparent background
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', transparent=True)
         buffer.seek(0)
         image_png = buffer.getvalue()
         buffer.close()
@@ -246,11 +299,28 @@ def policy_analytics_view(request):
 @login_required
 def employee_performance_view(request):
     """View to analyze employee workloads and task efficiency using Pandas and Matplotlib."""
-    # Query all tasks
-    tasks_qs = Task.objects.select_related('assigned_to', 'project').values(
+    profile = getattr(request.user, 'employee_profile', None)
+    role = 'founder' if request.user.is_superuser else 'employee'
+    if profile:
+        role = profile.role
+
+    # Enforce Row-Level Security: Filter based on role
+    if role in ['founder', 'hr']:
+        tasks_qs = Task.objects.select_related('assigned_to', 'project')
+        employees = Employee.objects.filter(is_active=True).order_by('name')
+    elif role == 'supervisor':
+        allowed_ids = [profile.id] + list(profile.subordinates.values_list('id', flat=True))
+        tasks_qs = Task.objects.filter(assigned_to_id__in=allowed_ids).select_related('assigned_to', 'project')
+        employees = Employee.objects.filter(id__in=allowed_ids, is_active=True).order_by('name')
+    else:
+        allowed_ids = [profile.id] if profile else []
+        tasks_qs = Task.objects.filter(assigned_to_id__in=allowed_ids).select_related('assigned_to', 'project')
+        employees = Employee.objects.filter(id__in=allowed_ids, is_active=True).order_by('name')
+
+    tasks_values = tasks_qs.values(
         'id', 'title', 'assigned_to__name', 'status', 'due_date', 'hours_logged'
     )
-    df_tasks = pd.DataFrame(list(tasks_qs))
+    df_tasks = pd.DataFrame(list(tasks_values))
 
     workload_chart = ""
     efficiency_chart = ""
@@ -264,23 +334,43 @@ def employee_performance_view(request):
         df_workload = df_tasks[df_tasks['status'].isin(['pending', 'in_progress'])]
         if not df_workload.empty:
             workload_series = df_workload.groupby('assigned_to__name').size().sort_values()
-            
+
+            # ── Premium Matplotlib style ──────────────────────────
+            plt.rcParams.update({
+                'font.family': 'DejaVu Sans',
+                'font.size': 10,
+                'axes.facecolor': 'none',
+                'figure.facecolor': 'none',
+                'text.color': '#374151',
+                'axes.labelcolor': '#374151',
+                'xtick.color': '#64748b',
+                'ytick.color': '#64748b',
+            })
+
             fig, ax = plt.subplots(figsize=(6, 4))
-            workload_series.plot(kind='barh', ax=ax, color='#0a7e8c', edgecolor='none')
-            ax.set_title('Active Workload (Pending & In Progress Tasks)', fontsize=12, fontweight='bold', pad=12, color='#0d2b55')
-            ax.set_xlabel('Number of Tasks', fontsize=10, fontweight='semibold')
-            ax.set_ylabel('Employee', fontsize=10, fontweight='semibold')
+            fig.patch.set_alpha(0)
+
+            workload_series.plot(kind='barh', ax=ax, color='#0891b2', edgecolor='none', linewidth=0)
+
+            ax.set_title('Active Workload (Pending & In Progress)',
+                         fontsize=11, fontweight='bold', pad=12, color='#0f172a')
+            ax.set_xlabel('Number of Tasks', fontsize=9, labelpad=8)
+            ax.set_ylabel('Employee', fontsize=9, labelpad=8)
+
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color('#cbd5e1')
-            ax.spines['bottom'].set_color('#cbd5e1')
-            ax.xaxis.grid(True, linestyle='--', alpha=0.5, color='#cbd5e1')
+            ax.spines['left'].set_color('#e2e8f0')
+            ax.spines['bottom'].set_color('#e2e8f0')
+
+            # Y-axis only soft gridlines for horizontal bars → use x-axis grid
+            ax.xaxis.grid(True, linestyle='--', linewidth=0.6, alpha=0.7, color='#e2e8f0')
+            ax.yaxis.grid(False)
             ax.set_axisbelow(True)
+
             plt.tight_layout()
-            
-            # Save to buffer
+
             buf1 = io.BytesIO()
-            plt.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
+            plt.savefig(buf1, format='png', dpi=150, bbox_inches='tight', transparent=True)
             buf1.seek(0)
             workload_chart = base64.b64encode(buf1.getvalue()).decode('utf-8')
             buf1.close()
@@ -292,27 +382,39 @@ def employee_performance_view(request):
         
         if completed_count + overdue_count > 0:
             efficiency_percentage = (completed_count / (completed_count + overdue_count)) * 100
-            
+
+            plt.rcParams.update({
+                'font.family': 'DejaVu Sans',
+                'font.size': 10,
+                'axes.facecolor': 'none',
+                'figure.facecolor': 'none',
+                'text.color': '#374151',
+            })
+
             fig, ax = plt.subplots(figsize=(5, 4))
+            fig.patch.set_alpha(0)
+
             labels = ['Completed', 'Overdue']
-            sizes = [completed_count, overdue_count]
-            colors = ['#16a34a', '#dc2626'] # Green vs Red
-            
+            sizes  = [completed_count, overdue_count]
+            # Premium palette: teal-green for completed, muted coral for overdue
+            colors = ['#0d9488', '#f87171']
+
             ax.pie(
-                sizes, 
-                labels=labels, 
-                autopct='%1.1f%%', 
-                startangle=90, 
-                colors=colors, 
-                textprops={'fontsize': 10, 'weight': 'semibold'},
-                wedgeprops={'edgecolor': '#fff', 'linewidth': 2}
+                sizes,
+                labels=labels,
+                autopct='%1.1f%%',
+                startangle=90,
+                colors=colors,
+                textprops={'fontsize': 9, 'color': '#374151'},
+                wedgeprops={'edgecolor': '#ffffff', 'linewidth': 2.5},
+                pctdistance=0.75,
             )
-            ax.set_title('Task Completion Efficiency', fontsize=12, fontweight='bold', pad=12, color='#0d2b55')
+            ax.set_title('Task Completion Efficiency',
+                         fontsize=11, fontweight='bold', pad=12, color='#0f172a')
             plt.tight_layout()
-            
-            # Save to buffer
+
             buf2 = io.BytesIO()
-            plt.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
+            plt.savefig(buf2, format='png', dpi=150, bbox_inches='tight', transparent=True)
             buf2.seek(0)
             efficiency_chart = base64.b64encode(buf2.getvalue()).decode('utf-8')
             buf2.close()
@@ -320,7 +422,6 @@ def employee_performance_view(request):
 
     # Calculate employee stats for table
     employees_data = []
-    employees = Employee.objects.filter(is_active=True).order_by('name')
     for emp in employees:
         led_count = Project.objects.filter(lead_employee=emp, status='active').count()
         

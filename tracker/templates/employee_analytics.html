@@ -14,7 +14,7 @@
 <div class="row g-4 mb-4">
   <!-- Workload Chart -->
   <div class="col-12 col-lg-7">
-    <div class="chart-card h-100">
+    <div class="chart-card premium-card h-100">
       <div class="card-title">
         <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
         Active Task Workload per Employee
@@ -34,7 +34,7 @@
 
   <!-- Efficiency Chart -->
   <div class="col-12 col-lg-5">
-    <div class="chart-card h-100">
+    <div class="chart-card premium-card h-100">
       <div class="card-title">
         <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
         Completion Efficiency: Completed vs. Overdue
@@ -62,7 +62,7 @@
     <h6><i class="bi bi-table me-1"></i> Staff Workload Registry &amp; Deadlines</h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-borderless table-hover align-middle mb-0">
       <thead>
         <tr>
           <th>Employee Name</th>
@@ -108,9 +108,11 @@
             {% endif %}
           </td>
           <td>
+            {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
             <a href="/admin/tracker/task/add/?assigned_to={{ data.employee.id }}" class="btn btn-sm btn-outline-primary" style="font-size: .8rem;">
               <i class="bi bi-plus-lg"></i> Assign Task
             </a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

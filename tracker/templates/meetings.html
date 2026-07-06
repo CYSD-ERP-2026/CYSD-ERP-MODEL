@@ -14,9 +14,11 @@
        style="border-color:#cbd5e1;">
       <i class="bi bi-download me-1"></i> Export CSV
     </a>
+    {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
     <a href="{% url 'admin:tracker_meeting_add' %}" class="btn btn-export">
       <i class="bi bi-calendar-plus me-1"></i> Add Meeting
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -85,7 +87,7 @@
     <h6><i class="bi bi-list-ul me-1"></i> All Meetings</h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-borderless table-hover align-middle mb-0">
       <thead>
         <tr>
           <th>Title</th>

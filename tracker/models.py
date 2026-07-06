@@ -10,6 +10,7 @@ Models:
 """
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,14 @@ EMPLOYMENT_TYPE_CHOICES = [
 ]
 
 
+ROLE_CHOICES = [
+    ('founder', 'Founder'),
+    ('hr', 'HR'),
+    ('supervisor', 'Supervisor'),
+    ('employee', 'Employee'),
+]
+
+
 class Employee(models.Model):
     """
     Staff / volunteer record for the NGO.
@@ -88,6 +97,28 @@ class Employee(models.Model):
     Each employee belongs to one primary Domain and has a designation,
     contact details, and employment metadata.
     """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='employee_profile',
+        help_text="Django user account linked to this employee profile"
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='employee',
+        help_text="Role-Based Access Control level"
+    )
+    supervisor = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='subordinates',
+        help_text="Supervisor this employee reports directly to"
+    )
     # Personal information
     employee_id = models.CharField(
         max_length=30,

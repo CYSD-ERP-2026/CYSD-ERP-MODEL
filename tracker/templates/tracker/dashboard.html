@@ -20,7 +20,7 @@
   <div class="row g-3 mb-4">
 
     <div class="col-6 col-xl-3">
-      <div class="stat-card">
+      <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#e0f2fe;">
           <i class="bi bi-diagram-3" style="color:#0284c7;"></i>
         </div>
@@ -32,7 +32,7 @@
     </div>
 
     <div class="col-6 col-xl-3">
-      <div class="stat-card">
+      <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#dcfce7;">
           <i class="bi bi-people-fill" style="color:#16a34a;"></i>
         </div>
@@ -44,7 +44,7 @@
     </div>
 
     <div class="col-6 col-xl-3">
-      <div class="stat-card">
+      <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#fef3c7;">
           <i class="bi bi-calendar3" style="color:#d97706;"></i>
         </div>
@@ -56,7 +56,7 @@
     </div>
 
     <div class="col-6 col-xl-3">
-      <div class="stat-card">
+      <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#f3e8ff;">
           <i class="bi bi-check2-circle" style="color:#7c3aed;"></i>
         </div>
@@ -73,7 +73,7 @@
   <div class="row g-3 mb-4">
 
     <div class="col-lg-7">
-      <div class="chart-card h-100">
+      <div class="chart-card premium-card h-100">
         <div class="card-title">
           <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
           Meetings by Domain
@@ -83,7 +83,7 @@
     </div>
 
     <div class="col-lg-5">
-      <div class="chart-card h-100">
+      <div class="chart-card premium-card h-100">
         <div class="card-title">
           <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
           Meetings by Intervention Scale
@@ -98,12 +98,14 @@
   <div class="table-card">
     <div class="table-header">
       <h6><i class="bi bi-clock-history me-1"></i> Recent Meetings</h6>
+      {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
       <a href="/admin/tracker/meeting/add/" class="btn btn-sm btn-outline-primary" style="font-size:.8rem;">
         <i class="bi bi-plus-lg"></i> Add Meeting
       </a>
+      {% endif %}
     </div>
     <div class="table-responsive">
-      <table class="table table-hover mb-0">
+      <table class="table table-borderless table-hover align-middle mb-0">
         <thead>
           <tr>
             <th>Title</th>
@@ -132,7 +134,9 @@
           <tr>
             <td colspan="6" class="text-center text-muted py-4">
               No meetings recorded yet.
+              {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
               <a href="/admin/tracker/meeting/add/">Add the first one.</a>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -150,17 +154,28 @@
   const byDomain = {{ by_domain_json|safe }};   // [{label, total}, ...]
   const byScale  = {{ by_scale_json|safe }};    // [{label, total}, ...]
 
-  // ── Colour palettes ─────────────────────────────────────────────
-  const DOMAIN_COLOURS = [
-    '#0a7e8c','#1565c0','#7c3aed','#d97706',
-    '#16a34a','#dc2626','#db2777','#0891b2',
+  // ── Premium colour palette (slate blues · soft teals · muted corals) ──
+  const PREMIUM_PALETTE = [
+    '#2563eb',  // blue-600
+    '#0891b2',  // cyan-600
+    '#0d9488',  // teal-600
+    '#7c3aed',  // violet-600
+    '#db2777',  // pink-600
+    '#ea580c',  // orange-600
+    '#65a30d',  // lime-600
+    '#ca8a04',  // yellow-600
   ];
-  const SCALE_COLOURS = [
-    '#0a7e8c','#1565c0','#7c3aed','#d97706','#16a34a',
+  const SCALE_PALETTE = [
+    '#0891b2',  // cyan-600
+    '#2563eb',  // blue-600
+    '#7c3aed',  // violet-600
+    '#0d9488',  // teal-600
+    '#db2777',  // pink-600
   ];
 
-  Chart.defaults.font.family = "'Segoe UI', sans-serif";
+  Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
   Chart.defaults.font.size   = 12;
+  Chart.defaults.color       = '#64748b';
 
   // ── Bar chart: Meetings by Domain ───────────────────────────────
   new Chart(document.getElementById('domainChart'), {
@@ -170,9 +185,10 @@
       datasets: [{
         label:           'Meetings',
         data:            byDomain.map(d => d.total),
-        backgroundColor: byDomain.map((_, i) => DOMAIN_COLOURS[i % DOMAIN_COLOURS.length]),
-        borderRadius:    6,
+        backgroundColor: byDomain.map((_, i) => PREMIUM_PALETTE[i % PREMIUM_PALETTE.length]),
+        borderRadius:    4,
         borderSkipped:   false,
+        borderWidth:     0,
       }],
     },
     options: {
@@ -180,18 +196,26 @@
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: '#0f172a',
+          padding: 10,
+          cornerRadius: 8,
           callbacks: {
-            label: ctx => ` ${ctx.parsed.y} meeting${ctx.parsed.y !== 1 ? 's' : ''}`,
+            label: ctx => `  ${ctx.parsed.y} meeting${ctx.parsed.y !== 1 ? 's' : ''}`,
           },
         },
       },
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { stepSize: 1, precision: 0 },
-          grid: { color: '#e2e8f0' },
+          ticks: { stepSize: 1, precision: 0, color: '#94a3b8' },
+          grid: { color: '#f1f5f9', lineWidth: 1 },
+          border: { display: false },
         },
-        x: { grid: { display: false } },
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: '#64748b' },
+        },
       },
     },
   });
@@ -203,23 +227,33 @@
       labels:   byScale.map(d => d.label),
       datasets: [{
         data:            byScale.map(d => d.total),
-        backgroundColor: byScale.map((_, i) => SCALE_COLOURS[i % SCALE_COLOURS.length]),
+        backgroundColor: byScale.map((_, i) => SCALE_PALETTE[i % SCALE_PALETTE.length]),
         hoverOffset:     6,
-        borderWidth:     2,
-        borderColor:     '#fff',
+        borderWidth:     3,
+        borderColor:     '#ffffff',
       }],
     },
     options: {
       responsive: true,
-      cutout: '62%',
+      cutout: '64%',
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { padding: 14, boxWidth: 12 },
+          labels: {
+            padding: 16,
+            boxWidth: 11,
+            borderRadius: 3,
+            usePointStyle: true,
+            pointStyle: 'circle',
+            color: '#64748b',
+          },
         },
         tooltip: {
+          backgroundColor: '#0f172a',
+          padding: 10,
+          cornerRadius: 8,
           callbacks: {
-            label: ctx => ` ${ctx.label}: ${ctx.parsed} meeting${ctx.parsed !== 1 ? 's' : ''}`,
+            label: ctx => `  ${ctx.label}: ${ctx.parsed} meeting${ctx.parsed !== 1 ? 's' : ''}`,
           },
         },
       },

@@ -8,9 +8,11 @@
     <h4><i class="bi bi-diagram-3 me-2"></i>Programme Domains</h4>
     <span class="meta">View and manage NGO thematic programme areas</span>
   </div>
+  {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' %}
   <a href="{% url 'admin:tracker_domain_add' %}" class="btn btn-export">
     <i class="bi bi-plus-lg me-1"></i> Add Domain
   </a>
+  {% endif %}
 </div>
 
 <!-- Table card -->
@@ -19,7 +21,7 @@
     <h6><i class="bi bi-list-ul me-1"></i> All Domains</h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-borderless table-hover align-middle mb-0">
       <thead>
         <tr>
           <th>Name</th>

@@ -75,14 +75,15 @@ class DomainAdmin(ModelAdmin):
 @admin.register(Employee)
 class EmployeeAdmin(ModelAdmin):
     list_display = (
-        'employee_id', 'name', 'domain', 'designation',
-        'employment_type', 'email', 'phone', 'is_active', 'date_joined',
+        'employee_id', 'name', 'role', 'supervisor', 'domain', 'designation',
+        'employment_type', 'email', 'is_active', 'date_joined',
     )
     list_display_links = ('employee_id', 'name')
-    list_filter = ('domain', 'employment_type', 'gender', 'is_active')
+    list_filter = ('role', 'domain', 'employment_type', 'gender', 'is_active')
     search_fields = ('name', 'employee_id', 'email', 'designation', 'phone')
     list_editable = ('is_active',)
-    autocomplete_fields = ('domain',)
+    autocomplete_fields = ('domain', 'supervisor')
+    raw_id_fields = ('user',)
     date_hierarchy = 'date_joined'
     ordering = ('name',)
     readonly_fields = ('created_at', 'updated_at', 'photo_preview')
@@ -96,7 +97,7 @@ class EmployeeAdmin(ModelAdmin):
         }),
         ('Role & Employment', {
             'fields': (
-                'domain', 'designation', 'employment_type',
+                'user', 'role', 'supervisor', 'domain', 'designation', 'employment_type',
                 'date_joined', 'date_left', 'is_active',
             ),
         }),
