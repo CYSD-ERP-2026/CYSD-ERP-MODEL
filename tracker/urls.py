@@ -11,4 +11,6 @@ urlpatterns = [
     path('analytics/', views.policy_analytics_view, name='analytics'),
     path('employee-analytics/', views.employee_performance_view, name='employee_analytics'),
     path('export/', views.export_meetings_csv, name='export_meetings_csv'),
+    # Dev-only masquerade endpoint – blocked in production by the view itself
+    path('dev-switch/<str:role_name>/', views.dev_role_switch_view, name='dev_switch'),
 ]

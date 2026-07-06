@@ -304,7 +304,75 @@
     {% endif %}
   </nav>
   <div class="sidebar-footer">
-    Logged in as <strong>{{ request.user.username }}</strong>
+
+    <!-- Logged-in user info -->
+    <div class="mb-2" style="font-size:.75rem;color:rgba(255,255,255,.4);">
+      <i class="bi bi-person-circle me-1"></i>
+      Logged in as <strong class="text-white-50">{{ request.user.username }}</strong>
+    </div>
+
+    <!-- Secure logout (POST required by Django) -->
+    <form action="{% url 'logout' %}" method="post" class="d-inline">
+      {% csrf_token %}
+      <button
+        type="submit"
+        class="btn btn-sm w-100 mb-2"
+        style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.25);font-size:.78rem;border-radius:7px;"
+        onmouseover="this.style.background='rgba(239,68,68,0.28)'"
+        onmouseout="this.style.background='rgba(239,68,68,0.15)'"
+      >
+        <i class="bi bi-box-arrow-right me-1"></i>Logout
+      </button>
+    </form>
+
+    <!-- Dev Mode role switcher (DEBUG only — invisible in production) -->
+    {% if debug %}
+    <div class="dropdown">
+      <button
+        class="btn btn-sm w-100 dropdown-toggle"
+        type="button"
+        data-bs-toggle="dropdown"
+        aria-expanded="false"
+        style="background:rgba(234,179,8,0.15);color:#fde68a;border:1px solid rgba(234,179,8,0.25);font-size:.78rem;border-radius:7px;"
+      >
+        <i class="bi bi-person-fill-gear me-1"></i>Dev: Switch Role
+      </button>
+      <ul class="dropdown-menu dropdown-menu-dark" style="font-size:.82rem;min-width:170px;">
+        <li>
+          <span class="dropdown-header" style="font-size:.68rem;letter-spacing:.05em;opacity:.6;">
+            MASQUERADE AS
+          </span>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'tracker:dev_switch' 'founder' %}">
+            <i class="bi bi-star-fill me-2 text-warning"></i>Founder
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'tracker:dev_switch' 'hr' %}">
+            <i class="bi bi-people-fill me-2 text-info"></i>HR Manager
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'tracker:dev_switch' 'supervisor' %}">
+            <i class="bi bi-person-badge-fill me-2 text-success"></i>Supervisor
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'tracker:dev_switch' 'employee' %}">
+            <i class="bi bi-person-fill me-2 text-secondary"></i>Employee
+          </a>
+        </li>
+        <li><hr class="dropdown-divider" style="opacity:.2;"></li>
+        <li>
+          <span class="dropdown-item-text text-warning-emphasis" style="font-size:.7rem;opacity:.7;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Dev mode only
+          </span>
+        </li>
+      </ul>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 

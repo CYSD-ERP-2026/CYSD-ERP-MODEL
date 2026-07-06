@@ -8,11 +8,13 @@ matplotlib.use('Agg')  # Headless mode for matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from django.conf import settings
+from django.contrib.auth import login, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import models
 from django.db.models import Count
-from django.http import HttpResponse
-from django.shortcuts import render
+from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from .models import Domain, Employee, Meeting, Project, Task
@@ -73,9 +75,9 @@ def dashboard_view(request):
     profile = getattr(request.user, 'employee_profile', None)
     if profile and profile.role == 'hr':
         for m in recent_meetings:
-            m.agenda = 'Confidential - Restructured Access'
-            m.minutes = 'Confidential - Restructured Access'
-            m.action_points = 'Confidential - Restructured Access'
+            m.agenda = 'Confidential - Access Restricted'
+            m.minutes = 'Confidential - Access Restricted'
+            m.action_points = 'Confidential - Access Restricted'
 
     context = {
         # Summary cards
@@ -179,9 +181,9 @@ def meetings_list_view(request):
     profile = getattr(request.user, 'employee_profile', None)
     if profile and profile.role == 'hr':
         for m in meetings:
-            m.agenda = 'Confidential - Restructured Access'
-            m.minutes = 'Confidential - Restructured Access'
-            m.action_points = 'Confidential - Restructured Access'
+            m.agenda = 'Confidential - Access Restricted'
+            m.minutes = 'Confidential - Access Restricted'
+            m.action_points = 'Confidential - Access Restricted'
 
     context = {
         'filter': meeting_filter,
@@ -309,9 +311,8 @@ def employee_performance_view(request):
         tasks_qs = Task.objects.select_related('assigned_to', 'project')
         employees = Employee.objects.filter(is_active=True).order_by('name')
     elif role == 'supervisor':
-        allowed_ids = [profile.id] + list(profile.subordinates.values_list('id', flat=True))
-        tasks_qs = Task.objects.filter(assigned_to_id__in=allowed_ids).select_related('assigned_to', 'project')
-        employees = Employee.objects.filter(id__in=allowed_ids, is_active=True).order_by('name')
+        tasks_qs = Task.objects.filter(assigned_to__supervisor=profile).select_related('assigned_to', 'project')
+        employees = Employee.objects.filter(supervisor=profile, is_active=True).order_by('name')
     else:
         allowed_ids = [profile.id] if profile else []
         tasks_qs = Task.objects.filter(assigned_to_id__in=allowed_ids).select_related('assigned_to', 'project')
@@ -460,3 +461,97 @@ def employee_performance_view(request):
         'generated_at': timezone.now(),
     }
     return render(request, 'employee_analytics.html', context)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dev Mode: Role Masquerade View
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Maps human-friendly role slugs to Django usernames.
+# Add / edit entries here to match the usernames in your local database.
+#
+DEV_ROLE_MAP = {
+    'founder':    'admin',      # typically the superuser / founder account
+    'hr':         'hr_user',    # a staff user with HR permissions
+    'supervisor': 'supervisor', # a staff user with supervisor permissions
+    'employee':   'employee',   # a regular non-staff user
+}
+
+
+def dev_role_switch_view(request, role_name):
+    """
+    DEV-ONLY masquerade endpoint.
+    Logs the current session in as a predefined test user for the given role,
+    allowing rapid RBAC testing without re-entering passwords.
+
+    Blocked in production: returns 403 when DEBUG=False.
+
+    Usage:
+        GET /dashboard/dev-switch/founder/    → log in as the 'admin' user
+        GET /dashboard/dev-switch/hr/         → log in as 'hr_user'
+        GET /dashboard/dev-switch/supervisor/ → log in as 'supervisor'
+        GET /dashboard/dev-switch/employee/   → log in as 'employee'
+
+    To add roles: extend DEV_ROLE_MAP above with 'slug': 'django_username'.
+    """
+    # Hard block in production – this view must never be reachable on live servers
+    if not settings.DEBUG:
+        return HttpResponseForbidden(
+            '<h1>403 Forbidden</h1>'
+            '<p>The Dev Role Switcher is disabled outside of DEBUG mode.</p>'
+        )
+
+    User = get_user_model()
+
+    username = DEV_ROLE_MAP.get(role_name.lower())
+    if not username:
+        from django.http import HttpResponseBadRequest
+        return HttpResponseBadRequest(
+            f'Unknown role "{role_name}". '
+            f'Available roles: {", ".join(DEV_ROLE_MAP.keys())}'
+        )
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        from django.contrib import messages
+        messages.warning(
+            request,
+            f'Dev switcher: no user with username "{username}" exists. '
+            f'Create it via manage.py createsuperuser or the admin panel.'
+        )
+        return redirect('tracker:dashboard')
+
+    # Dev Switcher Patch: Ensure the user has an Employee profile with the correct role
+    if not hasattr(user, 'employee_profile'):
+        from .models import Employee
+        import random
+        rand_suffix = random.randint(1000, 9999)
+        Employee.objects.create(
+            user=user,
+            employee_id=f"DEV-{user.username.upper()}-{rand_suffix}"[:30],
+            name=user.username.title(),
+            email=user.email or f"{user.username}_{rand_suffix}@cysd.org",
+            role=role_name.lower(),
+            designation="Dev Masquerade Profile",
+            is_active=True,
+        )
+    else:
+        profile = user.employee_profile
+        if profile.role != role_name.lower():
+            profile.role = role_name.lower()
+            profile.save()
+
+    # Django's login() requires a backend attribute when called outside of
+    # the standard authenticate() flow – set it explicitly.
+    user.backend = 'django.contrib.auth.backends.ModelBackend'
+    login(request, user)
+
+    from django.contrib import messages
+    messages.success(
+        request,
+        f'[Dev] Switched to role "{role_name}" → logged in as '
+        f'<strong>{user.username}</strong>.'
+    )
+    return redirect('tracker:dashboard')
