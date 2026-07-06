@@ -87,6 +87,8 @@ ROLE_CHOICES = [
     ('hr', 'HR'),
     ('supervisor', 'Supervisor'),
     ('employee', 'Employee'),
+    ('intern', 'Intern'),
+    ('volunteer', 'Volunteer'),
 ]
 
 
