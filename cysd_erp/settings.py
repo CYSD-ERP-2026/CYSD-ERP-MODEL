@@ -28,6 +28,15 @@ if DEBUG:
     # Allow any host during development/debugging (e.g., ngrok tunnels)
     ALLOWED_HOSTS = ['*']
 
+CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=[])
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+        'https://*.ngrok-free.dev',
+        'https://*.ngrok.io',
+    ]
+
 # ---------------------------------------------------------------------------
 # Application definition
 # ---------------------------------------------------------------------------
