@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block title %}Employees{% endblock %}
+
+{% block content %}
+<!-- Top bar -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-people me-2"></i>Employees &amp; Volunteers</h4>
+    <span class="meta">Manage staff profile registry and domain placements</span>
+  </div>
+  <a href="{% url 'admin:tracker_employee_add' %}" class="btn btn-export">
+    <i class="bi bi-person-plus me-1"></i> Add Employee
+  </a>
+</div>
+
+<!-- Table card -->
+<div class="table-card">
+  <div class="table-header">
+    <h6><i class="bi bi-list-ul me-1"></i> All Employees</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Photo</th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Domain</th>
+          <th>Designation</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td>
+            {% if e.profile_photo %}
+              <img src="{{ e.profile_photo.url }}" alt="{{ e.name }}"
+                   class="rounded-circle"
+                   style="width:38px;height:38px;object-fit:cover;border:1px solid #ddd;" />
+            {% else %}
+              <div class="bg-light rounded-circle text-muted d-flex align-items-center justify-content-center"
+                   style="width:38px;height:38px;border:1px solid #eee;">
+                <i class="bi bi-person-fill"></i>
+              </div>
+            {% endif %}
+          </td>
+          <td><code class="px-2 py-1 bg-light rounded text-dark" style="font-size:.8rem;">{{ e.employee_id }}</code></td>
+          <td class="fw-semibold text-dark">{{ e.name }}</td>
+          <td>{{ e.domain.name|default:"—" }}</td>
+          <td>{{ e.designation }}</td>
+          <td>{{ e.get_employment_type_display }}</td>
+          <td>
+            {% if e.is_active %}
+              <span class="badge bg-success-subtle text-success rounded-pill">Active</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary"
+              data-bs-toggle="modal"
+              data-bs-target="#employee-modal-{{ e.id }}"
+            >
+              <i class="bi bi-eye me-1"></i>View Details
+            </button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-4">
+            No employees recorded yet.
+            <a href="{% url 'admin:tracker_employee_add' %}">Add the first one.</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{# ═══ Modals rendered outside #main to avoid overflow:hidden clipping ═══ #}
+{% block modals %}
+{% for e in employees %}
+<div
+  class="modal fade"
+  id="employee-modal-{{ e.id }}"
+  tabindex="-1"
+  aria-labelledby="employee-modal-label-{{ e.id }}"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+
+      <!-- Header -->
+      <div class="modal-header" style="background:var(--cysd-navy);">
+        <div>
+          <h5 class="modal-title text-white mb-0" id="employee-modal-label-{{ e.id }}">
+            <i class="bi bi-person-badge me-2"></i>{{ e.name }}
+          </h5>
+          <small class="text-white-50">{{ e.designation }}</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body p-4">
+        <div class="row g-4">
+
+          <!-- Left: photo + status -->
+          <div class="col-md-4 text-center">
+            {% if e.profile_photo %}
+              <img src="{{ e.profile_photo.url }}" alt="{{ e.name }}"
+                   class="rounded-circle mb-3 shadow-sm"
+                   style="width:110px;height:110px;object-fit:cover;border:3px solid #e2e8f0;" />
+            {% else %}
+              <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3 shadow-sm"
+                   style="width:110px;height:110px;border:3px solid #e2e8f0;">
+                <i class="bi bi-person-fill text-secondary" style="font-size:2.5rem;"></i>
+              </div>
+            {% endif %}
+
+            <div class="fw-bold text-dark fs-6">{{ e.name }}</div>
+            <div class="text-muted mb-2" style="font-size:.85rem;">{{ e.designation }}</div>
+
+            {% if e.is_active %}
+              <span class="badge bg-success rounded-pill px-3 py-2">
+                <i class="bi bi-check-circle me-1"></i>Active
+              </span>
+            {% else %}
+              <span class="badge bg-secondary rounded-pill px-3 py-2">
+                <i class="bi bi-x-circle me-1"></i>Inactive
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Right: details grid -->
+          <div class="col-md-8">
+            <div class="row g-3">
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Employee ID</p>
+                <p class="fw-semibold mb-0">
+                  <code style="background:#f1f5f9;padding:.2rem .5rem;border-radius:5px;">{{ e.employee_id }}</code>
+                </p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Domain / Department</p>
+                <p class="fw-semibold mb-0">
+                  <i class="bi bi-diagram-3 me-1 text-secondary"></i>
+                  {{ e.domain.name|default:"Not assigned" }}
+                </p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Employment Type</p>
+                <p class="fw-semibold mb-0">
+                  <span class="badge bg-light text-dark border" style="font-size:.82rem;">
+                    {{ e.get_employment_type_display }}
+                  </span>
+                </p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Gender</p>
+                <p class="fw-semibold mb-0">{{ e.get_gender_display|default:"—" }}</p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Date Joined</p>
+                <p class="fw-semibold mb-0">
+                  <i class="bi bi-calendar3 me-1 text-secondary"></i>
+                  {{ e.date_joined|date:"d M Y" }}
+                </p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Date of Birth</p>
+                <p class="fw-semibold mb-0">{{ e.date_of_birth|date:"d M Y"|default:"—" }}</p>
+              </div>
+
+              <div class="col-12"><hr class="my-1" style="border-color:#e2e8f0;" /></div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Email</p>
+                <p class="mb-0">
+                  <a href="mailto:{{ e.email }}" class="text-decoration-none fw-semibold">
+                    <i class="bi bi-envelope me-1 text-secondary"></i>{{ e.email }}
+                  </a>
+                </p>
+              </div>
+
+              <div class="col-sm-6">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Phone</p>
+                <p class="fw-semibold mb-0">
+                  <i class="bi bi-telephone me-1 text-secondary"></i>
+                  {{ e.phone|default:"—" }}
+                </p>
+              </div>
+
+              {% if e.address %}
+              <div class="col-12">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Address</p>
+                <p class="mb-0" style="font-size:.88rem;line-height:1.6;">{{ e.address }}</p>
+              </div>
+              {% endif %}
+
+              {% if e.notes %}
+              <div class="col-12">
+                <p class="text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;">Notes</p>
+                <div class="p-2 rounded" style="background:#fefce8;border:1px solid #fef08a;font-size:.87rem;line-height:1.6;">
+                  {{ e.notes }}
+                </div>
+              </div>
+              {% endif %}
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+        <a href="/admin/tracker/employee/{{ e.id }}/change/" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-pencil me-1"></i>Edit in Admin
+        </a>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

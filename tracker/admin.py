@@ -1,0 +1,220 @@
+"""
+CYSD ERP – Django Admin Configuration
+======================================
+Provides richly configured admin views for:
+  • Domain   – list, search, toggle active
+  • Employee – list, filters, search, inline photo preview
+  • Meeting  – list, filters, search, attendees widget, inline action
+
+All admin classes use list_display, list_filter, search_fields,
+readonly_fields, fieldsets, and inline/action hooks so data entry
+and review from the Django admin is quick and ergonomic.
+"""
+from django.contrib import admin
+from unfold.admin import ModelAdmin, TabularInline
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+
+from .models import Domain, Employee, Meeting
+
+
+# ===========================================================================
+# Domain Admin
+# ===========================================================================
+
+@admin.register(Domain)
+class DomainAdmin(ModelAdmin):
+    list_display = ('name', 'code', 'lead', 'active_employee_count_display', 'is_active', 'created_at')
+    list_display_links = ('name',)
+    list_filter = ('is_active',)
+    search_fields = ('name', 'code', 'lead')
+    list_editable = ('is_active',)
+    ordering = ('name',)
+    readonly_fields = ('created_at', 'updated_at', 'active_employee_count_display')
+
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'code', 'description'),
+        }),
+        ('Management', {
+            'fields': ('lead', 'is_active'),
+        }),
+        ('Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Active Staff')
+    def active_employee_count_display(self, obj):
+        count = obj.active_employee_count
+        colour = '#2e7d32' if count > 0 else '#9e9e9e'
+        return format_html(
+            '<span style="color:{}; font-weight:bold;">{}</span>',
+            colour,
+            count,
+        )
+
+    actions = ['mark_active', 'mark_inactive']
+
+    @admin.action(description='Mark selected domains as Active')
+    def mark_active(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} domain(s) marked as active.')
+
+    @admin.action(description='Mark selected domains as Inactive')
+    def mark_inactive(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} domain(s) marked as inactive.')
+
+
+# ===========================================================================
+# Employee Admin
+# ===========================================================================
+
+@admin.register(Employee)
+class EmployeeAdmin(ModelAdmin):
+    list_display = (
+        'employee_id', 'name', 'domain', 'designation',
+        'employment_type', 'email', 'phone', 'is_active', 'date_joined',
+    )
+    list_display_links = ('employee_id', 'name')
+    list_filter = ('domain', 'employment_type', 'gender', 'is_active')
+    search_fields = ('name', 'employee_id', 'email', 'designation', 'phone')
+    list_editable = ('is_active',)
+    autocomplete_fields = ('domain',)
+    date_hierarchy = 'date_joined'
+    ordering = ('name',)
+    readonly_fields = ('created_at', 'updated_at', 'photo_preview')
+
+    fieldsets = (
+        ('Personal Details', {
+            'fields': (
+                'name', 'employee_id', 'gender', 'date_of_birth',
+                'profile_photo', 'photo_preview',
+            ),
+        }),
+        ('Role & Employment', {
+            'fields': (
+                'domain', 'designation', 'employment_type',
+                'date_joined', 'date_left', 'is_active',
+            ),
+        }),
+        ('Contact Information', {
+            'fields': ('email', 'phone', 'address'),
+        }),
+        ('Additional Notes', {
+            'classes': ('collapse',),
+            'fields': ('notes',),
+        }),
+        ('Record Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Current Photo')
+    def photo_preview(self, obj):
+        if obj.profile_photo:
+            return format_html(
+                '<img src="{}" style="max-height:120px; max-width:120px; '
+                'object-fit:cover; border-radius:6px; border:1px solid #ddd;" />',
+                obj.profile_photo.url,
+            )
+        return mark_safe('<span style="color:#9e9e9e;">No photo uploaded</span>')
+
+    actions = ['activate_employees', 'deactivate_employees']
+
+    @admin.action(description='Activate selected employees')
+    def activate_employees(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} employee(s) activated.')
+
+    @admin.action(description='Deactivate selected employees')
+    def deactivate_employees(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} employee(s) deactivated.')
+
+
+# ===========================================================================
+# Meeting Admin
+# ===========================================================================
+
+class MeetingAttendeeInline(TabularInline):
+    """
+    Inline used within MeetingAdmin to display and edit the M2M attendee list.
+    We use a raw_id / filter_horizontal approach at the main form level,
+    but this inline gives a quick glance at who's attending.
+    """
+    model = Meeting.attendees.through
+    extra = 1
+    verbose_name = 'Attendee'
+    verbose_name_plural = 'Attendees'
+    autocomplete_fields = ('employee',)
+
+
+@admin.register(Meeting)
+class MeetingAdmin(ModelAdmin):
+    list_display = (
+        'title', 'domain', 'meeting_type', 'status_badge',
+        'date', 'start_time', 'venue', 'attendee_count_display', 'organised_by',
+    )
+    list_display_links = ('title',)
+    list_filter = ('status', 'meeting_type', 'domain', 'date')
+    search_fields = ('title', 'venue', 'organised_by', 'agenda', 'minutes')
+    filter_horizontal = ('attendees',)
+    date_hierarchy = 'date'
+    ordering = ('-date', '-start_time')
+    readonly_fields = ('created_at', 'updated_at', 'attendee_count_display')
+
+    fieldsets = (
+        ('Meeting Identity', {
+            'fields': ('title', 'domain', 'meeting_type', 'status'),
+        }),
+        ('Schedule & Location', {
+            'fields': ('date', 'start_time', 'end_time', 'venue', 'organised_by'),
+        }),
+        ('Content', {
+            'fields': ('agenda', 'attendees', 'minutes', 'action_points'),
+        }),
+        ('Attachment', {
+            'classes': ('collapse',),
+            'fields': ('attachment',),
+        }),
+        ('Record Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colours = {
+            'scheduled': '#1565c0',
+            'completed': '#2e7d32',
+            'cancelled': '#c62828',
+            'postponed': '#e65100',
+        }
+        colour = colours.get(obj.status, '#616161')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:bold;">{}</span>',
+            colour,
+            obj.get_status_display(),
+        )
+
+    @admin.display(description='Attendees')
+    def attendee_count_display(self, obj):
+        return obj.attendee_count
+
+    actions = ['mark_completed', 'mark_cancelled']
+
+    @admin.action(description='Mark selected meetings as Completed')
+    def mark_completed(self, request, queryset):
+        updated = queryset.update(status='completed')
+        self.message_user(request, f'{updated} meeting(s) marked as completed.')
+
+    @admin.action(description='Mark selected meetings as Cancelled')
+    def mark_cancelled(self, request, queryset):
+        updated = queryset.update(status='cancelled')
+        self.message_user(request, f'{updated} meeting(s) marked as cancelled.')

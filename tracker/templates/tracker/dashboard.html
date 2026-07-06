@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+  <!-- Top bar -->
+  <div class="topbar">
+    <div>
+      <h4><i class="bi bi-speedometer2 me-2"></i>Analytics Dashboard</h4>
+      <span class="meta">Generated: {{ generated_at|date:"D, d M Y  H:i" }}</span>
+    </div>
+    <a href="{% url 'tracker:export_meetings_csv' %}" class="btn btn-export">
+      <i class="bi bi-download me-1"></i> Export CSV
+    </a>
+  </div>
+
+  <!-- ── Summary stat cards ── -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-6 col-xl-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#e0f2fe;">
+          <i class="bi bi-diagram-3" style="color:#0284c7;"></i>
+        </div>
+        <div>
+          <div class="value" style="color:#0284c7;">{{ total_domains }}</div>
+          <div class="label">Active Domains</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#dcfce7;">
+          <i class="bi bi-people-fill" style="color:#16a34a;"></i>
+        </div>
+        <div>
+          <div class="value" style="color:#16a34a;">{{ total_employees }}</div>
+          <div class="label">Active Employees</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#fef3c7;">
+          <i class="bi bi-calendar3" style="color:#d97706;"></i>
+        </div>
+        <div>
+          <div class="value" style="color:#d97706;">{{ total_meetings }}</div>
+          <div class="label">Total Meetings</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#f3e8ff;">
+          <i class="bi bi-check2-circle" style="color:#7c3aed;"></i>
+        </div>
+        <div>
+          <div class="value" style="color:#7c3aed;">{{ completed_meetings }}</div>
+          <div class="label">Completed</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /stat cards -->
+
+  <!-- ── Charts row ── -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-lg-7">
+      <div class="chart-card h-100">
+        <div class="card-title">
+          <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
+          Meetings by Domain
+        </div>
+        <canvas id="domainChart" height="130"></canvas>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="chart-card h-100">
+        <div class="card-title">
+          <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
+          Meetings by Intervention Scale
+        </div>
+        <canvas id="scaleChart" height="180"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /charts -->
+
+  <!-- ── Recent meetings table ── -->
+  <div class="table-card">
+    <div class="table-header">
+      <h6><i class="bi bi-clock-history me-1"></i> Recent Meetings</h6>
+      <a href="/admin/tracker/meeting/add/" class="btn btn-sm btn-outline-primary" style="font-size:.8rem;">
+        <i class="bi bi-plus-lg"></i> Add Meeting
+      </a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Domain</th>
+            <th>Scale</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in recent_meetings %}
+          <tr>
+            <td>{{ m.title }}</td>
+            <td>{{ m.domain.name|default:"—" }}</td>
+            <td>{{ m.get_intervention_scale_display }}</td>
+            <td>{{ m.date|date:"d M Y" }}</td>
+            <td>{{ m.get_meeting_type_display }}</td>
+            <td>
+              <span class="badge badge-{{ m.status }} rounded-pill">
+                {{ m.get_status_display }}
+              </span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+              No meetings recorded yet.
+              <a href="/admin/tracker/meeting/add/">Add the first one.</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div><!-- /table card -->
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<script>
+  // ── Data injected from Django view ──────────────────────────────
+  const byDomain = {{ by_domain_json|safe }};   // [{label, total}, ...]
+  const byScale  = {{ by_scale_json|safe }};    // [{label, total}, ...]
+
+  // ── Colour palettes ─────────────────────────────────────────────
+  const DOMAIN_COLOURS = [
+    '#0a7e8c','#1565c0','#7c3aed','#d97706',
+    '#16a34a','#dc2626','#db2777','#0891b2',
+  ];
+  const SCALE_COLOURS = [
+    '#0a7e8c','#1565c0','#7c3aed','#d97706','#16a34a',
+  ];
+
+  Chart.defaults.font.family = "'Segoe UI', sans-serif";
+  Chart.defaults.font.size   = 12;
+
+  // ── Bar chart: Meetings by Domain ───────────────────────────────
+  new Chart(document.getElementById('domainChart'), {
+    type: 'bar',
+    data: {
+      labels:   byDomain.map(d => d.label),
+      datasets: [{
+        label:           'Meetings',
+        data:            byDomain.map(d => d.total),
+        backgroundColor: byDomain.map((_, i) => DOMAIN_COLOURS[i % DOMAIN_COLOURS.length]),
+        borderRadius:    6,
+        borderSkipped:   false,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y} meeting${ctx.parsed.y !== 1 ? 's' : ''}`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, precision: 0 },
+          grid: { color: '#e2e8f0' },
+        },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+
+  // ── Doughnut chart: Meetings by Intervention Scale ───────────────
+  new Chart(document.getElementById('scaleChart'), {
+    type: 'doughnut',
+    data: {
+      labels:   byScale.map(d => d.label),
+      datasets: [{
+        data:            byScale.map(d => d.total),
+        backgroundColor: byScale.map((_, i) => SCALE_COLOURS[i % SCALE_COLOURS.length]),
+        hoverOffset:     6,
+        borderWidth:     2,
+        borderColor:     '#fff',
+      }],
+    },
+    options: {
+      responsive: true,
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { padding: 14, boxWidth: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.parsed} meeting${ctx.parsed !== 1 ? 's' : ''}`,
+          },
+        },
+      },
+    },
+  });
+</script>
+{% endblock %}
