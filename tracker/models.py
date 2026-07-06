@@ -154,8 +154,8 @@ class Employee(models.Model):
         verbose_name = 'Employee'
         verbose_name_plural = 'Employees'
         indexes = [
-            models.Index(fields=['domain', 'is_active']),
-            models.Index(fields=['employment_type']),
+            models.Index(fields=['domain', 'is_active'], name='tracker_emp_domain_i_idx'),
+            models.Index(fields=['employment_type'], name='tracker_emp_emp_type_idx'),
         ]
 
     def __str__(self):
@@ -284,8 +284,8 @@ class Meeting(models.Model):
         verbose_name = 'Meeting'
         verbose_name_plural = 'Meetings'
         indexes = [
-            models.Index(fields=['domain', 'date']),
-            models.Index(fields=['status', 'date']),
+            models.Index(fields=['domain', 'date'], name='tracker_mtg_domain_date_idx'),
+            models.Index(fields=['status', 'date'], name='tracker_mtg_status_date_idx'),
         ]
 
     def __str__(self):
