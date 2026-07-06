@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Advanced Analytics{% endblock %}
+
+{% block content %}
+<!-- Top bar -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-bar-chart-line me-2"></i>Policy Intervention Analytics</h4>
+    <span class="meta">Cross-tabulation and stacked distribution of policy intervention scales across programme domains</span>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Chart Card -->
+  <div class="col-12 col-xl-8">
+    <div class="chart-card">
+      <div class="card-title">
+        <i class="bi bi-image me-1" style="color:var(--cysd-teal);"></i>
+        Intervention Scales Stacked Distribution
+      </div>
+      <div class="text-center py-2">
+        {% if chart_image %}
+          <img src="data:image/png;base64,{{ chart_image }}" alt="Policy Intervention Scales Distribution" class="img-fluid rounded" style="max-height: 480px;" />
+        {% else %}
+          <div class="py-5 text-muted">
+            <i class="bi bi-database-exclamation fs-1 mb-3"></i>
+            <p>No meeting data is currently available. Please add meetings with domains and intervention scales in the admin panel to view analytics.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Crosstab Table Card -->
+  <div class="col-12 col-xl-4">
+    <div class="table-card h-100">
+      <div class="table-header">
+        <h6><i class="bi bi-grid-3x3-gap me-1"></i> Cross-Tabulation Data</h6>
+      </div>
+      <div class="p-3">
+        <div class="table-responsive">
+          {{ crosstab_html|safe }}
+        </div>
+        <div class="mt-3 text-muted" style="font-size: .8rem; line-height: 1.5;">
+          <i class="bi bi-info-circle me-1"></i>
+          This grid counts the occurrences of meetings mapping each <strong>Intervention Scale</strong> (rows) against its associated <strong>Thematic Domain</strong> (columns).
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

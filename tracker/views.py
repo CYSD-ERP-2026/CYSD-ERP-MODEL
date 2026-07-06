@@ -1,5 +1,12 @@
+import base64
 import csv
+import io
 import json
+
+import matplotlib
+matplotlib.use('Agg')  # Headless mode for matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from django.contrib.auth.decorators import login_required
 from django.db import models
@@ -163,3 +170,74 @@ def meetings_list_view(request):
         'generated_at': timezone.now(),
     }
     return render(request, 'meetings.html', context)
+
+
+@login_required
+def policy_analytics_view(request):
+    """View to analyze policy intervention scales using Pandas and Matplotlib."""
+    # Query meetings (select_related for domain optimization)
+    meetings_qs = Meeting.objects.select_related('domain').values(
+        'intervention_scale', 'domain__name'
+    )
+    
+    # Load into a Pandas DataFrame
+    df = pd.DataFrame(list(meetings_qs))
+    
+    if df.empty:
+        chart_image = ""
+        crosstab_html = "<p class='text-muted'>No data available for analysis.</p>"
+    else:
+        # Fill missing values if any domain is None
+        df['domain__name'] = df['domain__name'].fillna('Unassigned')
+        
+        # Human-readable labels for intervention scales
+        scale_labels = dict(Meeting._meta.get_field('intervention_scale').choices)
+        df['intervention_scale_label'] = df['intervention_scale'].map(scale_labels).fillna(df['intervention_scale'])
+        
+        # Generate crosstab: intervention_scale vs domain__name
+        crosstab = pd.crosstab(df['intervention_scale_label'], df['domain__name'])
+        
+        # Render crosstab to HTML table with clean Bootstrap classes
+        crosstab_html = crosstab.to_html(classes='table table-bordered table-striped table-hover table-sm mb-0')
+        
+        # Matplotlib visualization (stacked bar chart)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        
+        # Plot stacked bar chart with viridis palette
+        crosstab.plot(kind='bar', stacked=True, ax=ax, colormap='viridis', edgecolor='none')
+        
+        ax.set_title('Policy Intervention Scales by Domain', fontsize=14, fontweight='bold', pad=15, color='#0d2b55')
+        ax.set_xlabel('Intervention Scale', fontsize=11, fontweight='semibold', labelpad=10)
+        ax.set_ylabel('Number of Meetings', fontsize=11, fontweight='semibold', labelpad=10)
+        
+        # Style layout and labels
+        plt.xticks(rotation=0)  # keep labels horizontal
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#cbd5e1')
+        ax.spines['bottom'].set_color('#cbd5e1')
+        ax.yaxis.grid(True, linestyle='--', alpha=0.5, color='#cbd5e1')
+        ax.set_axisbelow(True)
+        
+        # Add legend
+        ax.legend(title='Domain', frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
+        
+        plt.tight_layout()
+        
+        # Save plot to BytesIO buffer
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+        buffer.seek(0)
+        image_png = buffer.getvalue()
+        buffer.close()
+        plt.close(fig)
+        
+        # Encode to base64 string
+        chart_image = base64.b64encode(image_png).decode('utf-8')
+        
+    context = {
+        'chart_image': chart_image,
+        'crosstab_html': crosstab_html,
+        'generated_at': timezone.now(),
+    }
+    return render(request, 'analytics.html', context)
