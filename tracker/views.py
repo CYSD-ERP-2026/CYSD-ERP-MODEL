@@ -128,14 +128,18 @@ def domains_list_view(request):
 
 @login_required
 def employees_list_view(request):
-    """List all employees. select_related brings domain in one JOIN."""
-    employees = (
+    """List employees with optional filtering by name, domain, and designation."""
+    from .filters import EmployeeFilter
+
+    qs = (
         Employee.objects
         .select_related('domain')
         .order_by('name')
     )
+    employee_filter = EmployeeFilter(request.GET, queryset=qs)
     context = {
-        'employees': employees,
+        'filter': employee_filter,
+        'employees': employee_filter.qs,
         'generated_at': timezone.now(),
     }
     return render(request, 'employees.html', context)
@@ -143,15 +147,19 @@ def employees_list_view(request):
 
 @login_required
 def meetings_list_view(request):
-    """List all meetings. select_related for domain; prefetch_related for attendees (M2M)."""
-    meetings = (
+    """List meetings with optional filtering by title, domain, scale, and status."""
+    from .filters import MeetingFilter
+
+    qs = (
         Meeting.objects
         .select_related('domain')
         .prefetch_related('attendees')
         .order_by('-date', '-start_time')
     )
+    meeting_filter = MeetingFilter(request.GET, queryset=qs)
     context = {
-        'meetings': meetings,
+        'filter': meeting_filter,
+        'meetings': meeting_filter.qs,
         'generated_at': timezone.now(),
     }
     return render(request, 'meetings.html', context)
