@@ -344,6 +344,9 @@
     <a href="{% url 'tracker:dashboard' %}" class="{% if request.path == '/dashboard/' %}active{% endif %}">
       <i class="bi bi-speedometer2"></i> Dashboard
     </a>
+    <a href="{% url 'tracker:my_tasks' %}" class="{% if '/dashboard/my-tasks/' in request.path %}active{% endif %}">
+      <i class="bi bi-list-task"></i> My Tasks
+    </a>
     <a href="{% url 'tracker:domains' %}" class="{% if '/dashboard/domains/' in request.path %}active{% endif %}">
       <i class="bi bi-diagram-3"></i> Domains
     </a>

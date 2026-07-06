@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}My Tasks &amp; Personal Dashboard{% endblock %}
+
+{% block content %}
+<!-- Top bar -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-person-workspace me-2"></i>My Personal Dashboard</h4>
+    <span class="meta">Manage and track your assigned project deliverables, deadlines, and logged hours</span>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3 py-2">
+      <i class="bi bi-person-badge me-1"></i>{{ profile.designation }}
+    </span>
+  </div>
+</div>
+
+<!-- Progress Bar -->
+{% if total_tasks > 0 %}
+<div class="card premium-card mb-4 p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold text-dark" style="font-size: .88rem;">Task Completion Progress</span>
+    <span class="text-muted fw-bold" style="font-size: .88rem;">{{ completed_tasks }} of {{ total_tasks }} completed</span>
+  </div>
+  <div class="progress" style="height: 10px; border-radius: 5px; background: #e2e8f0;">
+    <div class="progress-bar" role="progressbar" 
+         style="width: {% widthratio completed_tasks total_tasks 100 %}%; background: var(--cysd-teal); border-radius: 5px;" 
+         aria-valuenow="{% widthratio completed_tasks total_tasks 100 %}" aria-valuemin="0" aria-valuemax="100">
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+  <!-- Total -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-icon bg-primary-subtle text-primary border border-primary-subtle">
+        <i class="bi bi-list-task"></i>
+      </div>
+      <div>
+        <div class="value">{{ total_tasks }}</div>
+        <div class="label">Total Tasks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- In Progress -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-icon bg-info-subtle text-info border border-info-subtle">
+        <i class="bi bi-clock-history"></i>
+      </div>
+      <div>
+        <div class="value text-info">{{ in_progress_tasks }}</div>
+        <div class="label">In Progress</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overdue -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-icon bg-danger-subtle text-danger border border-danger-subtle">
+        <i class="bi bi-exclamation-triangle"></i>
+      </div>
+      <div>
+        <div class="value text-danger">{{ overdue_tasks }}</div>
+        <div class="label">Overdue</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hours Logged -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-icon bg-success-subtle text-success border border-success-subtle">
+        <i class="bi bi-hourglass-split"></i>
+      </div>
+      <div>
+        <div class="value text-success">{{ total_hours }}h</div>
+        <div class="label">Hours Logged</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Task Table Card -->
+<div class="table-card">
+  <div class="table-header">
+    <h6><i class="bi bi-card-checklist me-1"></i> Active Assignments &amp; Deadlines</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-borderless table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Task Title</th>
+          <th>Associated Project</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th class="text-center">Hours Logged</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr>
+          <td>
+            <div class="fw-semibold text-dark">{{ task.title }}</div>
+            <small class="text-muted">Task ID: #{{ task.id }}</small>
+          </td>
+          <td>
+            <span class="badge bg-light text-dark border">{{ task.project.title }}</span>
+          </td>
+          <td>
+            {% if task.status == 'overdue' %}
+              <span class="text-danger fw-bold"><i class="bi bi-calendar-x me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
+            {% elif task.status == 'completed' %}
+              <span class="text-success text-opacity-75"><i class="bi bi-calendar-check me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
+            {% else %}
+              <span class="text-secondary"><i class="bi bi-calendar3 me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if task.status == 'completed' %}
+              <span class="badge bg-success-subtle text-success border border-success-subtle fw-semibold rounded-pill px-2">Completed</span>
+            {% elif task.status == 'in_progress' %}
+              <span class="badge bg-info-subtle text-info border border-info-subtle fw-semibold rounded-pill px-2">In Progress</span>
+            {% elif task.status == 'overdue' %}
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold rounded-pill px-2">Overdue</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold rounded-pill px-2">Pending</span>
+            {% endif %}
+          </td>
+          <td class="text-center fw-bold text-dark">
+            {{ task.hours_logged }} hrs
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-5">
+            <i class="bi bi-emoji-smile fs-1 mb-2 d-block text-secondary"></i>
+            You don't have any tasks assigned to you currently. Keep up the great work!
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

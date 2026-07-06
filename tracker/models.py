@@ -393,11 +393,10 @@ class Task(models.Model):
         related_name='tasks',
         help_text="Project this task belongs to"
     )
-    assigned_to = models.ForeignKey(
+    assigned_to = models.ManyToManyField(
         Employee,
-        on_delete=models.CASCADE,
         related_name='tasks',
-        help_text="Employee assigned to this task"
+        help_text="Employees assigned to this task"
     )
     due_date = models.DateField(help_text="Task due date")
     status = models.CharField(
@@ -420,5 +419,8 @@ class Task(models.Model):
         verbose_name_plural = 'Tasks'
 
     def __str__(self):
-        return f"{self.title} – {self.assigned_to.name} [{self.get_status_display()}]"
+        if self.pk:
+            assignees = ", ".join([emp.name for emp in self.assigned_to.all()])
+            return f"{self.title} – [{assignees}] [{self.get_status_display()}]"
+        return f"{self.title} [{self.get_status_display()}]"
 

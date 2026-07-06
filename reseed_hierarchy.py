@@ -169,75 +169,96 @@ def reseed():
     )
 
     # 4. Create Tasks
+    def create_task(title, project, assigned_list, due_date, status, hours_logged):
+        t = Task.objects.create(
+            title=title,
+            project=project,
+            due_date=due_date,
+            status=status,
+            hours_logged=hours_logged
+        )
+        t.assigned_to.set(assigned_list)
+        return t
+
     # Under Siddharth's team (Supervisor 1):
     # Elina's tasks
-    Task.objects.create(
+    create_task(
         title="Map village enterprise clusters",
         project=proj1,
-        assigned_to=emp1_emp,
+        assigned_list=[emp1_emp],
         due_date=datetime.date.today() + datetime.timedelta(days=15),
         status="in_progress",
         hours_logged=Decimal("12.50")
     )
-    Task.objects.create(
+    create_task(
         title="Conduct baseline surveys in Bargarh",
         project=proj1,
-        assigned_to=emp1_emp,
+        assigned_list=[emp1_emp],
         due_date=datetime.date.today() - datetime.timedelta(days=5),
         status="overdue",
         hours_logged=Decimal("4.00")
     )
-    Task.objects.create(
+    create_task(
         title="Prepare SHG loan linkage forms",
         project=proj1,
-        assigned_to=emp1_emp,
+        assigned_list=[emp1_emp],
         due_date=datetime.date.today() - datetime.timedelta(days=10),
         status="completed",
         hours_logged=Decimal("18.00")
     )
     
     # Bikram's tasks
-    Task.objects.create(
+    create_task(
         title="Design data validation script",
         project=proj1,
-        assigned_to=emp2_emp,
+        assigned_list=[emp2_emp],
         due_date=datetime.date.today() + datetime.timedelta(days=30),
         status="pending",
         hours_logged=Decimal("0.00")
     )
-    Task.objects.create(
+    create_task(
         title="Clean and consolidate baseline datasets",
         project=proj1,
-        assigned_to=emp2_emp,
+        assigned_list=[emp2_emp],
         due_date=datetime.date.today() - datetime.timedelta(days=2),
         status="completed",
         hours_logged=Decimal("25.00")
     )
     
     # Ipsita's (Intern) tasks
-    Task.objects.create(
+    create_task(
         title="Draft qualitative case study reports",
         project=proj1,
-        assigned_to=intern_emp,
+        assigned_list=[intern_emp],
         due_date=datetime.date.today() + datetime.timedelta(days=10),
         status="in_progress",
         hours_logged=Decimal("8.00")
     )
 
+    # Let's also create a Shared Task assigned to BOTH Elina and Bikram to test ManyToMany!
+    create_task(
+        title="Joint fieldwork: Enterprise baseline reporting",
+        project=proj1,
+        assigned_list=[emp1_emp, emp2_emp],
+        due_date=datetime.date.today() + datetime.timedelta(days=20),
+        status="in_progress",
+        hours_logged=Decimal("15.00")
+    )
+
     # Under Sujata's team (Supervisor 2):
     # Vikram's (Volunteer) tasks
-    Task.objects.create(
+    create_task(
         title="Distribute learning kits in tribal blocks",
         project=proj2,
-        assigned_to=volunteer_emp,
+        assigned_list=[volunteer_emp],
         due_date=datetime.date.today() + datetime.timedelta(days=5),
         status="in_progress",
         hours_logged=Decimal("6.00")
     )
-    Task.objects.create(
+    create_task(
         title="Verify local school attendance logs",
         project=proj2,
-        assigned_to=volunteer_emp,
+        assigned_list=[volunteer_emp],
         due_date=datetime.date.today() - datetime.timedelta(days=4),
         status="completed",
         hours_logged=Decimal("10.00")

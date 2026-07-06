@@ -333,12 +333,17 @@ class ProjectAdmin(ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(ModelAdmin):
-    list_display = ('title', 'project', 'assigned_to', 'due_date', 'status_badge', 'hours_logged')
+    list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge', 'hours_logged')
     list_filter = ('status', 'project', 'assigned_to', 'due_date')
     search_fields = ('title', 'project__title', 'assigned_to__name')
-    autocomplete_fields = ('project', 'assigned_to')
+    autocomplete_fields = ('project',)
+    filter_horizontal = ('assigned_to',)
     ordering = ('due_date', 'title')
     readonly_fields = ('created_at', 'updated_at')
+
+    def display_assigned_to(self, obj):
+        return ", ".join([emp.name for emp in obj.assigned_to.all()])
+    display_assigned_to.short_description = 'Assigned To'
 
     fieldsets = (
         ('Task details', {

@@ -308,14 +308,14 @@ def employee_performance_view(request):
 
     # Enforce Row-Level Security: Filter based on role
     if role in ['founder', 'hr']:
-        tasks_qs = Task.objects.select_related('assigned_to', 'project')
+        tasks_qs = Task.objects.select_related('project')
         employees = Employee.objects.filter(is_active=True).order_by('name')
     elif role == 'supervisor':
-        tasks_qs = Task.objects.filter(assigned_to__supervisor=profile).select_related('assigned_to', 'project')
+        tasks_qs = Task.objects.filter(assigned_to__supervisor=profile).select_related('project')
         employees = Employee.objects.filter(supervisor=profile, is_active=True).order_by('name')
     else:
         allowed_ids = [profile.id] if profile else []
-        tasks_qs = Task.objects.filter(assigned_to_id__in=allowed_ids).select_related('assigned_to', 'project')
+        tasks_qs = Task.objects.filter(assigned_to__in=allowed_ids).select_related('project')
         employees = Employee.objects.filter(id__in=allowed_ids, is_active=True).order_by('name')
 
     tasks_values = tasks_qs.values(
@@ -555,3 +555,38 @@ def dev_role_switch_view(request, role_name):
         f'<strong>{user.username}</strong>.'
     )
     return redirect('tracker:dashboard')
+
+
+@login_required
+def my_tasks_view(request):
+    """Personal dashboard view for employees to track their assigned tasks."""
+    profile = getattr(request.user, 'employee_profile', None)
+    if not profile:
+        from django.contrib import messages
+        messages.warning(request, "You do not have an Employee profile linked to your account.")
+        return redirect('tracker:dashboard')
+
+    # Get all tasks assigned to this employee
+    tasks = Task.objects.filter(assigned_to=profile).select_related('project').order_by('due_date')
+
+    # Calculate summary statistics
+    total_tasks = tasks.count()
+    pending_tasks = tasks.filter(status='pending').count()
+    in_progress_tasks = tasks.filter(status='in_progress').count()
+    completed_tasks = tasks.filter(status='completed').count()
+    overdue_tasks = tasks.filter(status='overdue').count()
+    
+    # Calculate total hours logged
+    total_hours = sum(t.hours_logged for t in tasks)
+
+    context = {
+        'profile': profile,
+        'tasks': tasks,
+        'total_tasks': total_tasks,
+        'pending_tasks': pending_tasks,
+        'in_progress_tasks': in_progress_tasks,
+        'completed_tasks': completed_tasks,
+        'overdue_tasks': overdue_tasks,
+        'total_hours': total_hours,
+    }
+    return render(request, 'my_tasks.html', context)
