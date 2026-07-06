@@ -19,6 +19,7 @@ def reseed():
     Task.objects.all().delete()
     Project.objects.all().delete()
     Meeting.objects.all().delete()
+    Domain.objects.all().delete()
     
     # Delete all employees except the one linked to 'admin'
     admin_user = User.objects.get(username='admin')
@@ -41,20 +42,17 @@ def reseed():
     # Delete all users except 'admin'
     User.objects.exclude(username='admin').delete()
     
-    # Ensure we have at least one domain
-    domain = Domain.objects.first()
-    if not domain:
-        domain = Domain.objects.create(
-            name="Sustainable Rural Livelihoods",
-            code="SRL",
-            lead="Admin Founder"
-        )
+    # Create the requested domains
+    domain_srl = Domain.objects.create(name="Sustainable Rural Livelihoods", code="SRL", lead="Admin Founder")
+    domain_ied = Domain.objects.create(name="Inclusive Education", code="IED", lead="Sujata Patnaik")
+    domain_wem = Domain.objects.create(name="Women Empowerment & SHGs", code="WEM", lead="Harish Rao")
+    domain_hln = Domain.objects.create(name="Health & Nutrition", code="HLN", lead="Siddharth Mohanty")
         
     print("Database cleared. Creating new hierarchy...")
     
     # 2. Create users and linked employees
     # Passwords for all users is set to 'admin123' for ease of testing
-    def create_user_and_employee(username, name, role, supervisor, designation, email):
+    def create_user_and_employee(username, name, role, supervisor, designation, email, domain):
         user = User.objects.create_user(
             username=username,
             password='admin123',
@@ -78,6 +76,10 @@ def reseed():
         )
         return emp
 
+    # Link founder admin_profile to domain_srl
+    admin_profile.domain = domain_srl
+    admin_profile.save()
+
     # Create HR Manager (reports to founder)
     hr_emp = create_user_and_employee(
         username='hr_user',
@@ -85,7 +87,8 @@ def reseed():
         role='hr',
         supervisor=admin_profile,
         designation='Human Resources Manager',
-        email='hr@cysd.org'
+        email='hr@cysd.org',
+        domain=domain_wem
     )
     
     # Create Supervisor 1 (reports to founder)
@@ -95,7 +98,8 @@ def reseed():
         role='supervisor',
         supervisor=admin_profile,
         designation='Senior Program Manager (Livelihoods)',
-        email='sid@cysd.org'
+        email='sid@cysd.org',
+        domain=domain_srl
     )
 
     # Create Supervisor 2 (reports to founder)
@@ -105,7 +109,8 @@ def reseed():
         role='supervisor',
         supervisor=admin_profile,
         designation='Senior Coordinator (Education)',
-        email='sujata@cysd.org'
+        email='sujata@cysd.org',
+        domain=domain_ied
     )
     
     # Create Employees under Supervisor 1
@@ -115,7 +120,8 @@ def reseed():
         role='employee',
         supervisor=sup1_emp,
         designation='Field Officer',
-        email='elina@cysd.org'
+        email='elina@cysd.org',
+        domain=domain_srl
     )
 
     emp2_emp = create_user_and_employee(
@@ -124,7 +130,8 @@ def reseed():
         role='employee',
         supervisor=sup1_emp,
         designation='Data Analyst',
-        email='bikram@cysd.org'
+        email='bikram@cysd.org',
+        domain=domain_wem
     )
     
     # Create Intern under Supervisor 1
@@ -134,7 +141,8 @@ def reseed():
         role='intern',
         supervisor=sup1_emp,
         designation='Field Research Intern',
-        email='ipsita@cysd.org'
+        email='ipsita@cysd.org',
+        domain=domain_srl
     )
     
     # Create Volunteer under Supervisor 2
@@ -144,7 +152,8 @@ def reseed():
         role='volunteer',
         supervisor=sup2_emp,
         designation='Community Volunteer',
-        email='vikram@cysd.org'
+        email='vikram@cysd.org',
+        domain=domain_ied
     )
 
     print("Hierarchy created. Seeding projects, tasks, and meetings...")
@@ -152,7 +161,7 @@ def reseed():
     # 3. Create Projects
     proj1 = Project.objects.create(
         title="Village Micro-enterprise Scale-up",
-        domain=domain,
+        domain=domain_srl,
         start_date=datetime.date.today() - datetime.timedelta(days=60),
         deadline=datetime.date.today() + datetime.timedelta(days=90),
         status="active",
@@ -161,7 +170,7 @@ def reseed():
 
     proj2 = Project.objects.create(
         title="Tribal Education Capacity Support",
-        domain=domain,
+        domain=domain_ied,
         start_date=datetime.date.today() - datetime.timedelta(days=30),
         deadline=datetime.date.today() + datetime.timedelta(days=120),
         status="active",
@@ -265,9 +274,10 @@ def reseed():
     )
 
     # 5. Create Meetings
+    # --- Under Siddharth Mohanty (Supervisor 1) ---
     m1 = Meeting.objects.create(
-        title="Livelihoods Project Kick-off",
-        domain=domain,
+        title="SRL Quarterly Progress Review",
+        domain=domain_srl,
         meeting_type="internal",
         status="completed",
         intervention_scale="district",
@@ -283,8 +293,41 @@ def reseed():
     m1.attendees.set([sup1_emp, emp1_emp, emp2_emp, intern_emp])
 
     m2 = Meeting.objects.create(
-        title="Monthly Tribal Education Review",
-        domain=domain,
+        title="Nutrition Integration Consultative Meet",
+        domain=domain_hln,
+        meeting_type="partner",
+        status="completed",
+        intervention_scale="state",
+        date=datetime.date.today() - datetime.timedelta(days=8),
+        start_time=datetime.time(11, 0),
+        end_time=datetime.time(13, 0),
+        venue="Hotel Swosti, Bhubaneswar",
+        agenda="1. Address maternal nutrition issues\n2. Coordinate with health workers",
+        minutes="Aligned NHM indicators with regional intervention guidelines.",
+        action_points="- Harish to update recruitment for community nutrition helpers.",
+        organised_by=sup1_emp.name
+    )
+    m2.attendees.set([sup1_emp, hr_emp, emp1_emp])
+
+    m3 = Meeting.objects.create(
+        title="SHG Enterprise Convergence Planning",
+        domain=domain_wem,
+        meeting_type="internal",
+        status="scheduled",
+        intervention_scale="district",
+        date=datetime.date.today() + datetime.timedelta(days=5),
+        start_time=datetime.time(15, 0),
+        end_time=datetime.time(16, 30),
+        venue="Google Meet (Online)",
+        agenda="1. Assess microcredit linkage forms\n2. Discuss handloom cluster support",
+        organised_by=sup1_emp.name
+    )
+    m3.attendees.set([sup1_emp, emp2_emp])
+
+    # --- Under Sujata Patnaik (Supervisor 2) ---
+    m4 = Meeting.objects.create(
+        title="Inclusive Tribal Education Review",
+        domain=domain_ied,
         meeting_type="internal",
         status="scheduled",
         intervention_scale="community",
@@ -295,7 +338,39 @@ def reseed():
         agenda="1. Review learning kit distribution status\n2. Discuss volunteer coordination",
         organised_by=sup2_emp.name
     )
-    m2.attendees.set([sup2_emp, volunteer_emp])
+    m4.attendees.set([sup2_emp, volunteer_emp])
+
+    m5 = Meeting.objects.create(
+        title="Livelihood Education Bridge Course Planning",
+        domain=domain_srl,
+        meeting_type="internal",
+        status="completed",
+        intervention_scale="community",
+        date=datetime.date.today() - datetime.timedelta(days=12),
+        start_time=datetime.time(10, 0),
+        end_time=datetime.time(12, 0),
+        venue="Block Development Office, Phulbani",
+        agenda="1. Design curriculum for school dropouts\n2. Discuss farm skill classes",
+        minutes="Agreed on standard 60-day bridge syllabus template.",
+        action_points="- Elina to supply local dialect vocab guides.",
+        organised_by=sup2_emp.name
+    )
+    m5.attendees.set([sup2_emp, emp1_emp])
+
+    m6 = Meeting.objects.create(
+        title="WASH in Schools Infrastructure Audit",
+        domain=domain_hln,
+        meeting_type="field",
+        status="scheduled",
+        intervention_scale="district",
+        date=datetime.date.today() + datetime.timedelta(days=10),
+        start_time=datetime.time(10, 30),
+        end_time=datetime.time(13, 0),
+        venue="District Collectorate Conference Hall, Koraput",
+        agenda="1. Evaluate toilet construction progress\n2. Align safe drinking water assets",
+        organised_by=sup2_emp.name
+    )
+    m6.attendees.set([sup2_emp, volunteer_emp, hr_emp])
 
     print("Reseeding complete! All roles successfully mapped.")
 
