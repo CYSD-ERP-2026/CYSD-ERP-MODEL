@@ -263,14 +263,76 @@
     }
 
     @media (max-width: 768px) {
-      #sidebar { display: none; }
-      #main { margin-left: 0; padding: 1rem; }
+      #sidebar {
+        left: -240px;
+        transition: left 0.25s ease-in-out;
+        z-index: 1040;
+      }
+      #sidebar.show {
+        left: 0;
+      }
+      #main {
+        margin-left: 0 !important;
+        padding: 1.25rem 1rem !important;
+        padding-top: 4.75rem !important; /* space for the fixed mobile header */
+      }
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      .topbar .d-flex {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .mobile-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1030;
+        height: 56px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      }
+      .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.4); /* backdrop using deep slate-navy shadow */
+        backdrop-filter: blur(2px);
+        z-index: 1000;
+        display: none;
+      }
+      .sidebar-backdrop.show {
+        display: block;
+      }
+      /* Clean card overflow rules on mobile screens */
+      .table-card, .chart-card {
+        overflow-x: auto;
+      }
     }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
 
 <body>
+
+<!-- Mobile Header (Mobile only) -->
+<div class="mobile-header d-md-none bg-dark text-white p-3 d-flex align-items-center justify-content-between">
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-dark border-0 p-1" id="sidebarToggle" style="background: transparent;">
+      <i class="bi bi-list fs-3" style="color: #fff;"></i>
+    </button>
+    <h6 class="m-0 fw-bold text-white">CYSD ERP</h6>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge bg-info-subtle text-info border border-info-subtle fw-bold rounded-pill" style="font-size: .68rem;">
+      <i class="bi bi-shield-check me-1"></i>Active Role: {{ request.user.employee_profile.role|title }}
+    </span>
+  </div>
+</div>
 
 <!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
 <div id="sidebar">
@@ -396,6 +458,40 @@
   crossorigin="anonymous">
 </script>
 {% block extra_js %}{% endblock %}
+
+<!-- Mobile sidebar toggle javascript -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const toggleBtn = document.getElementById("sidebarToggle");
+    const sidebar = document.getElementById("sidebar");
+    
+    // Create backdrop element
+    const backdrop = document.createElement("div");
+    backdrop.className = "sidebar-backdrop";
+    document.body.appendChild(backdrop);
+    
+    if (toggleBtn && sidebar) {
+      toggleBtn.addEventListener("click", function() {
+        sidebar.classList.toggle("show");
+        backdrop.classList.toggle("show");
+      });
+      
+      backdrop.addEventListener("click", function() {
+        sidebar.classList.remove("show");
+        backdrop.classList.remove("show");
+      });
+      
+      // Close sidebar when clicking links
+      const links = sidebar.querySelectorAll("nav a");
+      links.forEach(link => {
+        link.addEventListener("click", function() {
+          sidebar.classList.remove("show");
+          backdrop.classList.remove("show");
+        });
+      });
+    }
+  });
+</script>
 
 </body>
 </html>
