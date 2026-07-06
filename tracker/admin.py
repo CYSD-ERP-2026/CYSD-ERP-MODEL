@@ -10,7 +10,9 @@ All admin classes use list_display, list_filter, search_fields,
 readonly_fields, fieldsets, and inline/action hooks so data entry
 and review from the Django admin is quick and ergonomic.
 """
+from django import forms
 from django.contrib import admin
+from django.contrib.auth.models import User
 from unfold.admin import ModelAdmin, TabularInline
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -72,8 +74,66 @@ class DomainAdmin(ModelAdmin):
 # Employee Admin
 # ===========================================================================
 
+class EmployeeAdminForm(forms.ModelForm):
+    custom_username = forms.CharField(
+        max_length=150,
+        required=False,
+        label="Username (new user account)",
+        help_text="Required when creating a new employee without a linked user."
+    )
+    custom_password = forms.CharField(
+        widget=forms.PasswordInput(render_value=False),
+        required=False,
+        label="Password (new user account)",
+        help_text="Required when creating a new employee without a linked user."
+    )
+
+    class Meta:
+        model = Employee
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Required only on creation
+        if not self.instance.pk:
+            self.fields['custom_username'].required = True
+            self.fields['custom_password'].required = True
+        else:
+            self.fields['custom_username'].required = False
+            self.fields['custom_password'].required = False
+
+    def clean_custom_username(self):
+        username = self.cleaned_data.get('custom_username')
+        if not self.instance.pk and username:
+            if User.objects.filter(username=username).exists():
+                raise forms.ValidationError("A user with this username already exists.")
+        return username
+
+    def save(self, commit=True):
+        employee = super().save(commit=False)
+        if not employee.pk and not employee.user:
+            username = self.cleaned_data.get('custom_username')
+            password = self.cleaned_data.get('custom_password')
+            if username and password:
+                user = User.objects.create_user(
+                    username=username,
+                    password=password,
+                    email=employee.email
+                )
+                if employee.role in ['founder', 'hr', 'supervisor']:
+                    user.is_staff = True
+                if employee.role == 'founder':
+                    user.is_superuser = True
+                user.save()
+                employee.user = user
+        if commit:
+            employee.save()
+        return employee
+
+
 @admin.register(Employee)
 class EmployeeAdmin(ModelAdmin):
+    form = EmployeeAdminForm
     list_display = (
         'employee_id', 'name', 'role', 'supervisor', 'domain', 'designation',
         'employment_type', 'email', 'is_active', 'date_joined',
@@ -89,6 +149,9 @@ class EmployeeAdmin(ModelAdmin):
     readonly_fields = ('created_at', 'updated_at', 'photo_preview')
 
     fieldsets = (
+        ('User Account & Role', {
+            'fields': ('custom_username', 'custom_password', 'user', 'role', 'supervisor'),
+        }),
         ('Personal Details', {
             'fields': (
                 'name', 'employee_id', 'gender', 'date_of_birth',
@@ -97,7 +160,7 @@ class EmployeeAdmin(ModelAdmin):
         }),
         ('Role & Employment', {
             'fields': (
-                'user', 'role', 'supervisor', 'domain', 'designation', 'employment_type',
+                'domain', 'designation', 'employment_type',
                 'date_joined', 'date_left', 'is_active',
             ),
         }),
