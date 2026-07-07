@@ -5,8 +5,13 @@
 <!-- Top bar -->
 <div class="topbar">
   <div>
-    <h4><i class="bi bi-people me-2"></i>Employees &amp; Volunteers</h4>
-    <span class="meta">Manage staff profile registry and domain placements</span>
+    {% if is_supervisor_view %}
+      <h4><i class="bi bi-people me-2"></i>My Team</h4>
+      <span class="meta">Employees reporting directly to {{ supervisor_profile.name }}</span>
+    {% else %}
+      <h4><i class="bi bi-people me-2"></i>Employees &amp; Volunteers</h4>
+      <span class="meta">Manage staff profile registry and domain placements</span>
+    {% endif %}
   </div>
   {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' %}
   <a href="{% url 'admin:tracker_employee_add' %}" class="btn btn-export">
@@ -14,6 +19,17 @@
   </a>
   {% endif %}
 </div>
+
+{% if is_supervisor_view %}
+<!-- Supervisor context banner -->
+<div class="alert d-flex align-items-center gap-2 mb-3"
+     style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:.65rem;color:#1d4ed8;font-size:.87rem;">
+  <i class="bi bi-person-badge fs-5 flex-shrink-0" style="color:#2563eb;"></i>
+  <span>
+    You are viewing your team only. Only employees who report directly to you are shown here.
+  </span>
+</div>
+{% endif %}
 
 <!-- ═══ Filter panel ═══ -->
 <div class="table-card mb-3">
@@ -25,19 +41,21 @@
       <div class="row g-2 align-items-end">
 
         <!-- Name search -->
-        <div class="col-12 col-sm-6 col-md-4">
+        <div class="col-12 col-sm-6 {% if is_supervisor_view %}col-md-5{% else %}col-md-4{% endif %}">
           <label for="{{ filter.form.name.id_for_label }}" class="form-label small fw-semibold text-secondary mb-1">Name</label>
           {{ filter.form.name }}
         </div>
 
-        <!-- Domain -->
+        {% if not is_supervisor_view %}
+        <!-- Domain (hidden for supervisors – their list is already scoped to their team) -->
         <div class="col-12 col-sm-6 col-md-3">
           <label for="{{ filter.form.domain.id_for_label }}" class="form-label small fw-semibold text-secondary mb-1">Domain</label>
           {{ filter.form.domain }}
         </div>
+        {% endif %}
 
         <!-- Designation search -->
-        <div class="col-12 col-sm-6 col-md-3">
+        <div class="col-12 col-sm-6 {% if is_supervisor_view %}col-md-5{% else %}col-md-3{% endif %}">
           <label for="{{ filter.form.designation.id_for_label }}" class="form-label small fw-semibold text-secondary mb-1">Designation</label>
           {{ filter.form.designation }}
         </div>
@@ -71,10 +89,13 @@
 <!-- Table card -->
 <div class="table-card">
   <div class="table-header">
-    <h6><i class="bi bi-list-ul me-1"></i> All Employees</h6>
+    <h6>
+      <i class="bi bi-list-ul me-1"></i>
+      {% if is_supervisor_view %}My Team Members{% else %}All Employees{% endif %}
+    </h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-borderless table-hover align-middle mb-0">
+    <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
       <thead>
         <tr>
           <th>Photo</th>
@@ -90,7 +111,7 @@
       <tbody>
         {% for e in employees %}
         <tr>
-          <td>
+          <td data-label="Photo">
             {% if e.profile_photo %}
               <img src="{{ e.profile_photo.url }}" alt="{{ e.name }}"
                    class="rounded-circle"
@@ -102,19 +123,19 @@
               </div>
             {% endif %}
           </td>
-          <td><code class="px-2 py-1 bg-light rounded text-dark" style="font-size:.8rem;">{{ e.employee_id }}</code></td>
-          <td class="fw-semibold text-dark">{{ e.name }}</td>
-          <td>{{ e.domain.name|default:"—" }}</td>
-          <td>{{ e.designation }}</td>
-          <td>{{ e.get_employment_type_display }}</td>
-          <td>
+          <td data-label="ID"><code class="px-2 py-1 bg-light rounded text-dark" style="font-size:.8rem;">{{ e.employee_id }}</code></td>
+          <td data-label="Name" class="fw-semibold text-dark">{{ e.name }}</td>
+          <td data-label="Domain">{{ e.domain.name|default:"—" }}</td>
+          <td data-label="Designation">{{ e.designation }}</td>
+          <td data-label="Type">{{ e.get_employment_type_display }}</td>
+          <td data-label="Status">
             {% if e.is_active %}
               <span class="badge bg-success-subtle text-success rounded-pill">Active</span>
             {% else %}
               <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactive</span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Actions">
             <button
               type="button"
               class="btn btn-sm btn-outline-primary"
@@ -128,8 +149,12 @@
         {% empty %}
         <tr>
           <td colspan="8" class="text-center text-muted py-4">
-            No employees recorded yet.
-            <a href="{% url 'admin:tracker_employee_add' %}">Add the first one.</a>
+            {% if is_supervisor_view %}
+              No team members found. Employees assigned to report to you will appear here.
+            {% else %}
+              No employees recorded yet.
+              <a href="{% url 'admin:tracker_employee_add' %}">Add the first one.</a>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

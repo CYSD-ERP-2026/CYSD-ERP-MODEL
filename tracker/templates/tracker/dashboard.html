@@ -8,17 +8,57 @@
   <!-- Top bar -->
   <div class="topbar">
     <div>
-      <h4><i class="bi bi-speedometer2 me-2"></i>Analytics Dashboard</h4>
-      <span class="meta">Generated: {{ generated_at|date:"D, d M Y  H:i" }}</span>
+      {% if dashboard_scope == 'team' %}
+        <h4><i class="bi bi-speedometer2 me-2"></i>Team Dashboard</h4>
+        <span class="meta">Activity overview for your team · {{ generated_at|date:"D, d M Y  H:i" }}</span>
+      {% elif dashboard_scope == 'personal' %}
+        <h4><i class="bi bi-speedometer2 me-2"></i>My Dashboard</h4>
+        <span class="meta">Your personal activity overview · {{ generated_at|date:"D, d M Y  H:i" }}</span>
+      {% else %}
+        <h4><i class="bi bi-speedometer2 me-2"></i>Analytics Dashboard</h4>
+        <span class="meta">Generated: {{ generated_at|date:"D, d M Y  H:i" }}</span>
+      {% endif %}
     </div>
+    {% if dashboard_scope == 'all' %}
     <a href="{% url 'tracker:export_meetings_csv' %}" class="btn btn-export">
       <i class="bi bi-download me-1"></i> Export CSV
     </a>
+    {% endif %}
   </div>
+
+  {% if awaiting_verification_count > 0 %}
+  <!-- Verification Center Alert -->
+  <div class="alert d-flex align-items-center justify-content-between gap-3 mb-4 p-3 shadow-sm border-0 flex-wrap"
+       style="background: #fff7ed; border-left: 5px solid #ea580c !important; border-radius: .65rem; color: #9a3412; font-size: .9rem;">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-exclamation-triangle-fill fs-4 flex-shrink-0 text-warning"></i>
+      <span>You have <strong>{{ awaiting_verification_count }}</strong> task checklist submission{{ awaiting_verification_count|pluralize }} awaiting review from your team.</span>
+    </div>
+    <a href="{% url 'tracker:checklist_supervisor' %}" class="btn btn-sm btn-warning fw-semibold px-3 py-2" style="font-size: .82rem; border-radius: .4rem; min-height: 44px; display: inline-flex; align-items: center;">
+      Go to Verification Center <i class="bi bi-arrow-right ms-1"></i>
+    </a>
+  </div>
+  {% endif %}
+
+  {% if dashboard_scope == 'team' %}
+  <div class="alert d-flex align-items-center gap-2 mb-3"
+       style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:.65rem;color:#1d4ed8;font-size:.87rem;">
+    <i class="bi bi-people fs-5 flex-shrink-0" style="color:#2563eb;"></i>
+    <span>Showing activity for <strong>you and your {{ total_employees }} direct report{{ total_employees|pluralize }}</strong>.</span>
+  </div>
+  {% elif dashboard_scope == 'personal' %}
+  <div class="alert d-flex align-items-center gap-2 mb-3"
+       style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:.65rem;color:#15803d;font-size:.87rem;">
+    <i class="bi bi-person-check fs-5 flex-shrink-0" style="color:#16a34a;"></i>
+    <span>Showing your personal activity, <strong>{{ user_profile.name }}</strong>.</span>
+  </div>
+  {% endif %}
 
   <!-- ── Summary stat cards ── -->
   <div class="row g-3 mb-4">
 
+    {% if dashboard_scope == 'all' %}
+    <!-- Domains card — org-wide only -->
     <div class="col-6 col-xl-3">
       <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#e0f2fe;">
@@ -30,7 +70,10 @@
         </div>
       </div>
     </div>
+    {% endif %}
 
+    {% if dashboard_scope != 'personal' %}
+    <!-- Employees card — org-wide or team count -->
     <div class="col-6 col-xl-3">
       <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#dcfce7;">
@@ -38,11 +81,13 @@
         </div>
         <div>
           <div class="value" style="color:#16a34a;">{{ total_employees }}</div>
-          <div class="label">Active Employees</div>
+          <div class="label">{% if dashboard_scope == 'team' %}Team Members{% else %}Active Employees{% endif %}</div>
         </div>
       </div>
     </div>
+    {% endif %}
 
+    <!-- Total meetings card -->
     <div class="col-6 col-xl-3">
       <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#fef3c7;">
@@ -50,11 +95,12 @@
         </div>
         <div>
           <div class="value" style="color:#d97706;">{{ total_meetings }}</div>
-          <div class="label">Total Meetings</div>
+          <div class="label">{% if dashboard_scope == 'personal' %}My Meetings{% elif dashboard_scope == 'team' %}Team Meetings{% else %}Total Meetings{% endif %}</div>
         </div>
       </div>
     </div>
 
+    <!-- Completed meetings card -->
     <div class="col-6 col-xl-3">
       <div class="stat-card premium-card">
         <div class="stat-icon" style="background:#f3e8ff;">
@@ -67,9 +113,25 @@
       </div>
     </div>
 
+    {% if personal_checklist_stats %}
+    <!-- Checklist Progress card -->
+    <div class="col-6 col-xl-3">
+      <div class="stat-card premium-card">
+        <div class="stat-icon" style="background:#e0f2fe;">
+          <i class="bi bi-card-checklist" style="color:#0284c7;"></i>
+        </div>
+        <div>
+          <div class="value" style="color:#0284c7;">{{ personal_checklist_stats.percentage }}%</div>
+          <div class="label">Checklist Progress</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div><!-- /stat cards -->
 
-  <!-- ── Charts row ── -->
+  {% if dashboard_scope != 'personal' %}
+  <!-- ── Charts row (hidden for personal scope — not meaningful for 1 person) ── -->
   <div class="row g-3 mb-4">
 
     <div class="col-lg-7">
@@ -78,7 +140,9 @@
           <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
           Meetings by Domain
         </div>
-        <canvas id="domainChart" height="130"></canvas>
+        <div class="chart-frame">
+          <canvas id="domainChart"></canvas>
+        </div>
       </div>
     </div>
 
@@ -88,16 +152,57 @@
           <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
           Meetings by Intervention Scale
         </div>
-        <canvas id="scaleChart" height="180"></canvas>
+        <div class="chart-frame">
+          <canvas id="scaleChart"></canvas>
+        </div>
       </div>
     </div>
 
   </div><!-- /charts -->
 
+  <!-- Explanation details -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="card premium-card p-4">
+        <h5 class="fw-bold mb-3" style="color: var(--cysd-navy);">
+          <i class="bi bi-info-circle-fill me-2 text-primary"></i>Understanding Dashboard Analytics
+        </h5>
+        <p class="text-secondary" style="font-size: 0.92rem; line-height: 1.6;">
+          This dashboard summarizes overall meeting activities across thematic programs and operational boundaries. These charts provide key indicators of administrative focus and strategic alignment:
+        </p>
+        <div class="row g-3 mt-1">
+          <div class="col-12 col-md-6">
+            <div class="p-3 rounded bg-light border-start border-cyan border-3 h-100" style="border-left-color: var(--cysd-teal) !important;">
+              <h6 class="fw-bold text-dark"><i class="bi bi-bar-chart-fill me-1" style="color: var(--cysd-teal);"></i> Meetings by Domain</h6>
+              <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+                Tracks coordination and meeting frequency across departments. A high concentration in a single domain points to active reviews, training, or field-mobilization events within that specific sector, while lower-density bars suggest areas that may be in self-execution phases.
+              </p>
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <div class="p-3 rounded bg-light border-start border-amber border-3 h-100" style="border-left-color: var(--cysd-amber) !important;">
+              <h6 class="fw-bold text-dark"><i class="bi bi-pie-chart-fill me-1" style="color: var(--cysd-amber);"></i> Meetings by Intervention Scale</h6>
+              <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+                Illustrates the operational distribution of our meetings. It balances local/field engagement (Individual &amp; Community) against strategic partnerships (District, State &amp; National), indicating whether efforts are skewed towards grassroots delivery or systemic policy work.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ── Recent meetings table ── -->
   <div class="table-card">
     <div class="table-header">
-      <h6><i class="bi bi-clock-history me-1"></i> Recent Meetings</h6>
+      <h6>
+        <i class="bi bi-clock-history me-1"></i>
+        {% if dashboard_scope == 'personal' %}My Recent Meetings
+        {% elif dashboard_scope == 'team' %}Team Recent Meetings
+        {% else %}Recent Meetings
+        {% endif %}
+      </h6>
       {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
       <a href="/admin/tracker/meeting/add/" class="btn btn-sm btn-outline-primary" style="font-size:.8rem;">
         <i class="bi bi-plus-lg"></i> Add Meeting
@@ -105,7 +210,7 @@
       {% endif %}
     </div>
     <div class="table-responsive">
-      <table class="table table-borderless table-hover align-middle mb-0">
+      <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
         <thead>
           <tr>
             <th>Title</th>
@@ -119,12 +224,12 @@
         <tbody>
           {% for m in recent_meetings %}
           <tr>
-            <td>{{ m.title }}</td>
-            <td>{{ m.domain.name|default:"—" }}</td>
-            <td>{{ m.get_intervention_scale_display }}</td>
-            <td>{{ m.date|date:"d M Y" }}</td>
-            <td>{{ m.get_meeting_type_display }}</td>
-            <td>
+            <td data-label="Title" class="fw-semibold text-dark">{{ m.title }}</td>
+            <td data-label="Domain">{{ m.domain.name|default:"—" }}</td>
+            <td data-label="Scale">{{ m.get_intervention_scale_display }}</td>
+            <td data-label="Date">{{ m.date|date:"d M Y" }}</td>
+            <td data-label="Type">{{ m.get_meeting_type_display }}</td>
+            <td data-label="Status">
               <span class="badge badge-{{ m.status }} rounded-pill">
                 {{ m.get_status_display }}
               </span>
@@ -133,9 +238,15 @@
           {% empty %}
           <tr>
             <td colspan="6" class="text-center text-muted py-4">
-              No meetings recorded yet.
-              {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
-              <a href="/admin/tracker/meeting/add/">Add the first one.</a>
+              {% if dashboard_scope == 'personal' %}
+                You are not listed as an attendee in any meetings yet.
+              {% elif dashboard_scope == 'team' %}
+                No meetings found involving you or your team members.
+              {% else %}
+                No meetings recorded yet.
+                {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' %}
+                <a href="/admin/tracker/meeting/add/">Add the first one.</a>
+                {% endif %}
               {% endif %}
             </td>
           </tr>
@@ -147,117 +258,50 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if dashboard_scope != 'personal' %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-
 <script>
-  // ── Data injected from Django view ──────────────────────────────
-  const byDomain = {{ by_domain_json|safe }};   // [{label, total}, ...]
-  const byScale  = {{ by_scale_json|safe }};    // [{label, total}, ...]
+  document.addEventListener("DOMContentLoaded", function() {
+    CYSDCharts.setupChartDefaults();
 
-  // ── Premium colour palette (slate blues · soft teals · muted corals) ──
-  const PREMIUM_PALETTE = [
-    '#2563eb',  // blue-600
-    '#0891b2',  // cyan-600
-    '#0d9488',  // teal-600
-    '#7c3aed',  // violet-600
-    '#db2777',  // pink-600
-    '#ea580c',  // orange-600
-    '#65a30d',  // lime-600
-    '#ca8a04',  // yellow-600
-  ];
-  const SCALE_PALETTE = [
-    '#0891b2',  // cyan-600
-    '#2563eb',  // blue-600
-    '#7c3aed',  // violet-600
-    '#0d9488',  // teal-600
-    '#db2777',  // pink-600
-  ];
+    const byDomain = {{ by_domain_json|safe }};
+    const byScale  = {{ by_scale_json|safe }};
 
-  Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
-  Chart.defaults.font.size   = 12;
-  Chart.defaults.color       = '#64748b';
+    if (byDomain.length > 0) {
+      const domainValues = byDomain.map(d => d.total);
+      new Chart(document.getElementById('domainChart'), {
+        type: 'bar',
+        data: {
+          labels: byDomain.map(d => d.label),
+          datasets: [{
+            label: 'Meetings',
+            data: domainValues,
+            backgroundColor: byDomain.map((_, i) => CYSDCharts.seriesPalette[i % CYSDCharts.seriesPalette.length]),
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: CYSDCharts.barOptions(domainValues, 'meeting'),
+      });
+    }
 
-  // ── Bar chart: Meetings by Domain ───────────────────────────────
-  new Chart(document.getElementById('domainChart'), {
-    type: 'bar',
-    data: {
-      labels:   byDomain.map(d => d.label),
-      datasets: [{
-        label:           'Meetings',
-        data:            byDomain.map(d => d.total),
-        backgroundColor: byDomain.map((_, i) => PREMIUM_PALETTE[i % PREMIUM_PALETTE.length]),
-        borderRadius:    4,
-        borderSkipped:   false,
-        borderWidth:     0,
-      }],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#0f172a',
-          padding: 10,
-          cornerRadius: 8,
-          callbacks: {
-            label: ctx => `  ${ctx.parsed.y} meeting${ctx.parsed.y !== 1 ? 's' : ''}`,
-          },
+    if (byScale.length > 0) {
+      const scaleValues = byScale.map(d => d.total);
+      new Chart(document.getElementById('scaleChart'), {
+        type: 'doughnut',
+        data: {
+          labels: byScale.map(d => d.label),
+          datasets: [{
+            data: scaleValues,
+            backgroundColor: byScale.map((_, i) => CYSDCharts.seriesPalette[(i + 1) % CYSDCharts.seriesPalette.length]),
+            borderWidth: 2,
+            borderColor: '#ffffff',
+          }],
         },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { stepSize: 1, precision: 0, color: '#94a3b8' },
-          grid: { color: '#f1f5f9', lineWidth: 1 },
-          border: { display: false },
-        },
-        x: {
-          grid: { display: false },
-          border: { display: false },
-          ticks: { color: '#64748b' },
-        },
-      },
-    },
-  });
-
-  // ── Doughnut chart: Meetings by Intervention Scale ───────────────
-  new Chart(document.getElementById('scaleChart'), {
-    type: 'doughnut',
-    data: {
-      labels:   byScale.map(d => d.label),
-      datasets: [{
-        data:            byScale.map(d => d.total),
-        backgroundColor: byScale.map((_, i) => SCALE_PALETTE[i % SCALE_PALETTE.length]),
-        hoverOffset:     6,
-        borderWidth:     3,
-        borderColor:     '#ffffff',
-      }],
-    },
-    options: {
-      responsive: true,
-      cutout: '64%',
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            padding: 16,
-            boxWidth: 11,
-            borderRadius: 3,
-            usePointStyle: true,
-            pointStyle: 'circle',
-            color: '#64748b',
-          },
-        },
-        tooltip: {
-          backgroundColor: '#0f172a',
-          padding: 10,
-          cornerRadius: 8,
-          callbacks: {
-            label: ctx => `  ${ctx.label}: ${ctx.parsed} meeting${ctx.parsed !== 1 ? 's' : ''}`,
-          },
-        },
-      },
-    },
+        options: CYSDCharts.doughnutOptions(scaleValues, 'meeting', '70%'),
+      });
+    }
   });
 </script>
+{% endif %}
 {% endblock %}

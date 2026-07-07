@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% block title %}Verification Center{% endblock %}
+
+{% block content %}
+
+<!-- ── Top bar ── -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-check2-square me-2"></i>Verification Center</h4>
+    <span class="meta">Approve or reject completed checklist items submitted by your team reports</span>
+  </div>
+  <span class="badge bg-light text-dark border fw-semibold px-3 py-2" style="font-size:.82rem;">
+    <i class="bi bi-shield-lock me-1 text-secondary"></i>Role: {{ role|title }}
+  </span>
+</div>
+
+<!-- ── Subordinate Team Summary ── -->
+<h5 class="fw-bold mb-3 text-dark"><i class="bi bi-people-fill me-1 text-secondary"></i> Subordinate Team Metrics</h5>
+<div class="row g-3 mb-4">
+  {% for emp in team_employees %}
+    {% with stats=emp.stats %}
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="card premium-card p-3 h-100">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="bg-light rounded-circle text-muted d-flex align-items-center justify-content-center"
+               style="width:36px;height:36px;border:1px solid #eee;">
+            <i class="bi bi-person-fill fs-5"></i>
+          </div>
+          <div>
+            <div class="fw-semibold text-dark" style="font-size: .88rem;">{{ emp.name }}</div>
+            <div class="text-muted" style="font-size: .75rem;">{{ emp.designation }}</div>
+          </div>
+        </div>
+        
+        {% if stats %}
+          <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: .78rem;">
+            <span class="text-muted">Checklist Completion</span>
+            <span class="fw-bold text-primary">{{ stats.completion_percentage }}%</span>
+          </div>
+          <div class="progress mb-3" style="height: 6px; border-radius: 3px; background: #e2e8f0;">
+            <div class="progress-bar" role="progressbar" 
+                 style="width: {{ stats.completion_percentage }}%; background: var(--cysd-teal); border-radius: 3px;" 
+                 aria-valuenow="{{ stats.completion_percentage }}" aria-valuemin="0" aria-valuemax="100">
+            </div>
+          </div>
+          <div class="d-flex justify-content-between text-muted" style="font-size: .72rem;">
+            <span><strong class="text-success">{{ stats.total_completed }}</strong> Approved</span>
+            <span><strong class="text-warning">{{ stats.total_awaiting }}</strong> Submissions</span>
+            <span><strong>{{ stats.total_assigned }}</strong> Assigned</span>
+          </div>
+        {% else %}
+          <p class="text-muted mb-0 small" style="font-style: italic;">No checklist activity recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endwith %}
+  {% empty %}
+    <div class="col-12">
+      <div class="alert alert-info py-3 mb-0">
+        <i class="bi bi-info-circle me-2"></i>No direct subordinates found assigned to you.
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- ── Awaiting Verification Section ── -->
+<div class="table-card mb-4 border-warning-subtle shadow-sm">
+  <div class="table-header bg-warning-subtle text-dark border-bottom-0 py-3">
+    <h6 class="mb-0 fw-bold d-flex align-items-center gap-2">
+      <i class="bi bi-exclamation-circle-fill text-warning fs-5"></i>
+      Awaiting Verification Center ({{ awaiting_count }})
+    </h6>
+  </div>
+  
+  {% if awaiting_items %}
+    <ul class="list-group list-group-flush">
+      {% for item in awaiting_items %}
+        <li class="list-group-item px-4 py-3" style="border-bottom:1px solid #e2e8f0;">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+            
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge rounded-pill" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:.72rem;">
+                  Awaiting Approval
+                </span>
+                <span class="fw-bold text-dark fs-6">{{ item.title }}</span>
+              </div>
+              {% if item.description %}
+                <p class="text-secondary mb-2" style="font-size: .88rem; line-height: 1.5;">{{ item.description }}</p>
+              {% endif %}
+              <div class="d-flex flex-wrap gap-4 text-muted" style="font-size: .75rem;">
+                <span><i class="bi bi-person me-1"></i>Subordinate: <strong class="text-dark">{{ item.assigned_to.name }}</strong></span>
+                <span><i class="bi bi-person-badge me-1"></i>Assigned by: {{ item.created_by.name|default:"—" }}</span>
+                <span><i class="bi bi-clock me-1"></i>Submitted: {{ item.submitted_at|date:"d M Y, H:i" }}</span>
+              </div>
+            </div>
+            
+            <!-- Touch Friendly Actions (Min 44x44px target) -->
+            <div class="flex-shrink-0 d-flex flex-wrap align-items-center gap-2" style="align-self: center;">
+              <!-- Approve Button Form -->
+              <form method="post" action="{% url 'tracker:checklist_resolve' item.id %}" class="m-0 p-0"
+                    data-cysd-confirm="Approve completion of '{{ item.title|escapejs }}' for {{ item.assigned_to.name }}?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="approve" />
+                <button type="submit" class="btn btn-success d-flex align-items-center justify-content-center gap-2 fw-semibold px-4"
+                        style="min-width: 44px; min-height: 44px; border-radius: 8px; font-size: .88rem;">
+                  <i class="bi bi-check-circle-fill fs-5"></i> Approve
+                </button>
+              </form>
+              
+              <!-- Reject Form trigger -->
+              <button class="btn btn-outline-danger d-flex align-items-center justify-content-center gap-2 fw-semibold px-4"
+                      style="min-width: 44px; min-height: 44px; border-radius: 8px; font-size: .88rem;"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#reject-collapse-{{ item.id }}"
+                      aria-expanded="false"
+                      aria-controls="reject-collapse-{{ item.id }}">
+                <i class="bi bi-x-circle fs-5"></i> Reject
+              </button>
+            </div>
+            
+          </div>
+          
+          <!-- Rejection Collapse Feedback Panel -->
+          <div class="collapse mt-3" id="reject-collapse-{{ item.id }}">
+            <div class="p-3 border rounded-3 bg-light">
+              <form method="post" action="{% url 'tracker:checklist_resolve' item.id %}" class="m-0"
+                    data-cysd-confirm="Send back '{{ item.title|escapejs }}' to {{ item.assigned_to.name }} for revision?">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reject" />
+                <div class="mb-3">
+                  <label for="feedback-{{ item.id }}" class="form-label small fw-semibold text-secondary">
+                    Specify Rejection Reasons / Fix Requirements
+                  </label>
+                  <textarea class="form-control" id="feedback-{{ item.id }}" name="feedback" rows="2" 
+                            placeholder="Provide details on what needs to be revised by the employee..." required></textarea>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" 
+                          data-bs-toggle="collapse" data-bs-target="#reject-collapse-{{ item.id }}">Cancel</button>
+                  <button type="submit" class="btn btn-sm btn-danger px-3">Confirm &amp; Send Back</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="text-center text-muted py-5 bg-white border-top">
+      <i class="bi bi-shield-check text-success fs-1 mb-3 d-block text-opacity-75"></i>
+      <p class="mb-0 fw-semibold text-dark" style="font-size: .95rem;">Clear Queue!</p>
+      <small class="text-muted">No checklist submissions are currently awaiting your verification.</small>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ── Team Checklist Registry List ── -->
+<div class="table-card">
+  <div class="table-header">
+    <h6><i class="bi bi-list-task me-1"></i> Team Checklist Log &amp; History</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Subordinate</th>
+          <th>Checklist Title</th>
+          <th>Assigned By</th>
+          <th>Created Date</th>
+          <th>Status</th>
+          <th>Resolution Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in all_items %}
+          <tr>
+            <td data-label="Subordinate" class="fw-semibold text-dark">
+              <i class="bi bi-person-fill text-secondary me-1"></i>{{ item.assigned_to.name }}
+            </td>
+            <td data-label="Checklist Title">
+              <div class="fw-semibold">{{ item.title }}</div>
+              {% if item.description %}
+                <small class="text-muted text-truncate d-block" style="max-width: 250px;">{{ item.description }}</small>
+              {% endif %}
+            </td>
+            <td data-label="Assigned By">{{ item.created_by.name|default:"—" }}</td>
+            <td data-label="Created Date">{{ item.created_at|date:"d M Y" }}</td>
+            <td data-label="Status">
+              {% if item.status == 'PENDING' %}
+                <span class="badge bg-light text-secondary border rounded-pill">Pending</span>
+              {% elif item.status == 'AWAITING_VERIFICATION' %}
+                <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill">Awaiting Verification</span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success rounded-pill">Completed</span>
+              {% endif %}
+            </td>
+            <td data-label="Resolution Details">
+              {% if item.status == 'COMPLETED' %}
+                <span class="text-success small"><i class="bi bi-check-lg me-1"></i>Approved {{ item.resolved_at|date:"d M Y" }}</span>
+              {% elif item.rejection_feedback %}
+                <div class="text-danger small" style="line-height:1.4; max-width: 200px;">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i>Rejected: {{ item.rejection_feedback }}
+                </div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">No checklist items recorded.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

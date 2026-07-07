@@ -151,3 +151,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Project custom exclusions
+ngrok-v3-stable-windows-amd64.zip
+seed_output.log
+*.zip

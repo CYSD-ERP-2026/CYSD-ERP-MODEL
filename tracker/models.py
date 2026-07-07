@@ -424,3 +424,200 @@ class Task(models.Model):
             return f"{self.title} – [{assignees}] [{self.get_status_display()}]"
         return f"{self.title} [{self.get_status_display()}]"
 
+
+# ---------------------------------------------------------------------------
+# TaskChecklist  –  multi-phase verification workflow
+# ---------------------------------------------------------------------------
+
+CHECKLIST_STATUS_CHOICES = [
+    ('PENDING',               'Pending'),
+    ('AWAITING_VERIFICATION', 'Awaiting Verification'),
+    ('COMPLETED',             'Completed'),
+]
+
+
+class TaskChecklist(models.Model):
+    """
+    A single checklist item assigned by a Supervisor or Founder to one Employee.
+
+    Lifecycle
+    ---------
+    PENDING  ──►  AWAITING_VERIFICATION  ──►  COMPLETED
+                         │
+                         └──► PENDING  (supervisor rejected)
+
+    Creation rules (enforced in clean()):
+      • Only roles 'founder', 'hr', or 'supervisor' may create checklist items.
+      • A supervisor may only assign tasks to their own direct subordinates.
+      • A founder / hr may assign to anyone.
+    """
+
+    title = models.CharField(
+        max_length=250,
+        help_text='Short descriptive title of the checklist item',
+    )
+    description = models.TextField(
+        blank=True,
+        help_text='Detailed description or acceptance criteria',
+    )
+    assigned_to = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name='checklist_items',
+        help_text='Employee this checklist item is assigned to',
+    )
+    created_by = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_checklist_items',
+        help_text='Supervisor / founder who created this item',
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=CHECKLIST_STATUS_CHOICES,
+        default='PENDING',
+        db_index=True,
+    )
+    # Populated when a supervisor rejects the submission
+    rejection_feedback = models.TextField(
+        blank=True,
+        help_text='Feedback provided by the supervisor when rejecting a submission',
+    )
+    # Timestamps for each phase transition
+    submitted_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the employee marked this item as done',
+    )
+    resolved_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the supervisor approved or rejected',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Task Checklist Item'
+        verbose_name_plural = 'Task Checklist Items'
+        indexes = [
+            models.Index(
+                fields=['assigned_to', 'status'],
+                name='tracker_chk_assignee_stat_idx',
+            ),
+            models.Index(
+                fields=['status', 'created_at'],
+                name='tracker_chk_status_date_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.title} → {self.assigned_to.name} [{self.get_status_display()}]'
+
+    def clean(self):
+        """
+        Enforce creation / assignment rules:
+          1. created_by must have role founder, hr, or supervisor.
+          2. A supervisor may only assign to their own direct subordinates.
+        """
+        from django.core.exceptions import ValidationError
+
+        if self.created_by is None:
+            return  # skip validation during programmatic creation without a creator
+
+        creator_role = self.created_by.role
+        allowed_creator_roles = ('founder', 'hr', 'supervisor')
+
+        if creator_role not in allowed_creator_roles:
+            raise ValidationError(
+                f'Only Founders, HR, or Supervisors can create checklist items. '
+                f'"{self.created_by.name}" has role "{creator_role}".'
+            )
+
+        if creator_role == 'supervisor':
+            # Supervisors are restricted to their own direct reports
+            if self.assigned_to.supervisor_id != self.created_by.pk:
+                raise ValidationError(
+                    f'Supervisor "{self.created_by.name}" can only assign tasks to '
+                    f'their direct reports. "{self.assigned_to.name}" does not report to them.'
+                )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# EmployeeStats  –  cached analytics snapshot, refreshed by signal
+# ---------------------------------------------------------------------------
+
+class EmployeeStats(models.Model):
+    """
+    Cached analytics row for each Employee.
+
+    Recalculated atomically every time a TaskChecklist item transitions to
+    COMPLETED (via the post_save signal in signals.py).  Reading dashboards
+    hit this table instead of running expensive aggregates on every request.
+    """
+    employee = models.OneToOneField(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name='stats',
+        primary_key=True,
+    )
+    total_assigned = models.PositiveIntegerField(default=0)
+    total_completed = models.PositiveIntegerField(default=0)
+    total_pending = models.PositiveIntegerField(default=0)
+    total_awaiting = models.PositiveIntegerField(default=0)
+    # 0.0 – 100.0, stored as DECIMAL for charting precision
+    completion_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+    )
+    last_recalculated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Employee Stats'
+        verbose_name_plural = 'Employee Stats'
+
+    def __str__(self):
+        return (
+            f'{self.employee.name} – '
+            f'{self.completion_percentage}% complete '
+            f'({self.total_completed}/{self.total_assigned})'
+        )
+
+    @classmethod
+    def recalculate_for(cls, employee: 'Employee') -> 'EmployeeStats':
+        """
+        Atomically recompute all counters for the given employee and
+        upsert the stats row.  Called by the post_save signal.
+        """
+        from django.db.models import Count, Q
+
+        agg = TaskChecklist.objects.filter(assigned_to=employee).aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='COMPLETED')),
+            pending=Count('id', filter=Q(status='PENDING')),
+            awaiting=Count('id', filter=Q(status='AWAITING_VERIFICATION')),
+        )
+
+        total      = agg['total']      or 0
+        completed  = agg['completed']  or 0
+        pending    = agg['pending']    or 0
+        awaiting   = agg['awaiting']   or 0
+        pct = round((completed / total) * 100, 2) if total > 0 else 0.00
+
+        stats, _ = cls.objects.update_or_create(
+            employee=employee,
+            defaults={
+                'total_assigned':        total,
+                'total_completed':       completed,
+                'total_pending':         pending,
+                'total_awaiting':        awaiting,
+                'completion_percentage': pct,
+            },
+        )
+        return stats
+

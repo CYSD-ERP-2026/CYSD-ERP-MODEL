@@ -15,14 +15,16 @@
   <div class="col-12 col-xl-8">
     <div class="chart-card premium-card">
       <div class="card-title">
-        <i class="bi bi-image me-1" style="color:var(--cysd-teal);"></i>
+        <i class="bi bi-bar-chart-steps me-1" style="color:var(--cysd-teal);"></i>
         Intervention Scales Stacked Distribution
       </div>
-      <div class="text-center py-2">
-        {% if chart_image %}
-          <img src="data:image/png;base64,{{ chart_image }}" alt="Policy Intervention Scales Distribution" class="img-fluid rounded" style="max-height: 480px;" />
+      <div class="py-2">
+        {% if chart_data_json != '{}' %}
+          <div class="chart-frame chart-frame-lg">
+            <canvas id="interventionChart"></canvas>
+          </div>
         {% else %}
-          <div class="py-5 text-muted">
+          <div class="py-5 text-center text-muted">
             <i class="bi bi-database-exclamation fs-1 mb-3"></i>
             <p>No meeting data is currently available. Please add meetings with domains and intervention scales in the admin panel to view analytics.</p>
           </div>
@@ -49,4 +51,75 @@
     </div>
   </div>
 </div>
+
+<!-- Explanation details -->
+<div class="row g-4 mt-2">
+  <div class="col-12">
+    <div class="card premium-card p-4">
+      <h5 class="fw-bold mb-3" style="color: var(--cysd-navy);">
+        <i class="bi bi-info-circle-fill me-2 text-primary"></i>Understanding Policy Intervention Analytics
+      </h5>
+      <p class="text-secondary" style="font-size: 0.92rem; line-height: 1.6;">
+        This analytical dashboard maps the geographic and operational scope of our meetings (Intervention Scales) against our programmatic departments (Thematic Domains). By examining this intersection, leadership can visualize whether specific domains are primarily operational at the grassroots level or engaged in high-level advocacy.
+      </p>
+      <div class="row g-3 mt-1">
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-primary border-3 h-100">
+            <h6 class="fw-bold text-dark"><i class="bi bi-people me-1"></i> Grassroots Level</h6>
+            <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+              <strong>Individual &amp; Community</strong> scales represent direct programmatic delivery and localized stakeholder mobilization. High volumes here show a strong field presence and citizen-centric execution.
+            </p>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-info border-3 h-100">
+            <h6 class="fw-bold text-dark"><i class="bi bi-geo-alt me-1"></i> Regional Level</h6>
+            <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+              <strong>District</strong> scale indicators show middle-tier execution, capacity building of local bodies, block-level coordination, and departmental alignment with local government agencies.
+            </p>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-warning border-3 h-100">
+            <h6 class="fw-bold text-dark"><i class="bi bi-bank me-1"></i> Macro Policy Level</h6>
+            <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+              <strong>State &amp; National</strong> scales track state-wide reviews, national coalition building, and legislative policy reviews. This represents system-strengthening and advocacy efforts.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if chart_data_json != '{}' %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    CYSDCharts.setupChartDefaults();
+    const chartData = {{ chart_data_json|safe }};
+    
+    if (chartData.datasets && chartData.datasets.length > 0) {
+      // Aggregate total values for stacked percent labels
+      const allValues = [];
+      const numLabels = chartData.labels.length;
+      for (let i = 0; i < numLabels; i++) {
+        let sum = 0;
+        chartData.datasets.forEach(ds => {
+          sum += Number(ds.data[i] || 0);
+        });
+        allValues.push(sum);
+      }
+
+      new Chart(document.getElementById('interventionChart'), {
+        type: 'bar',
+        data: chartData,
+        options: CYSDCharts.stackedOptions(allValues, 'meeting'),
+      });
+    }
+  });
+</script>
+{% endif %}
 {% endblock %}

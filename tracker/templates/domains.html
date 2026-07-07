@@ -21,7 +21,7 @@
     <h6><i class="bi bi-list-ul me-1"></i> All Domains</h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-borderless table-hover align-middle mb-0">
+    <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
       <thead>
         <tr>
           <th>Name</th>
@@ -35,22 +35,22 @@
       <tbody>
         {% for d in domains %}
         <tr>
-          <td class="fw-bold text-dark">{{ d.name }}</td>
-          <td><code class="px-2 py-1 bg-light rounded text-secondary">{{ d.code }}</code></td>
-          <td>{{ d.lead|default:"—" }}</td>
-          <td>
+          <td data-label="Name" class="fw-bold text-dark">{{ d.name }}</td>
+          <td data-label="Code"><code class="px-2 py-1 bg-light rounded text-secondary">{{ d.code }}</code></td>
+          <td data-label="Lead / Focal Person">{{ d.lead|default:"—" }}</td>
+          <td data-label="Active Staff">
             <span class="badge bg-light text-success border border-success-subtle rounded fw-semibold">
               {{ d.emp_count }} staff
             </span>
           </td>
-          <td>
+          <td data-label="Status">
             {% if d.is_active %}
               <span class="badge bg-success-subtle text-success rounded-pill">Active</span>
             {% else %}
               <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactive</span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Actions">
             <button
               type="button"
               class="btn btn-sm btn-outline-primary"

@@ -98,6 +98,18 @@ DATABASES = {
 }
 
 # ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+# Uses LocMem by default so the app works everywhere. In production, set
+# DJANGO_CACHE_URL to a shared backend such as Redis via django-environ.
+CACHES = {
+    'default': env.cache(
+        'DJANGO_CACHE_URL',
+        default='locmemcache://cysd-erp-dashboard'
+    )
+}
+
+# ---------------------------------------------------------------------------
 # Password validation
 # ---------------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [

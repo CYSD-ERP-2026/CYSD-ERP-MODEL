@@ -17,7 +17,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from .models import Domain, Employee, Meeting, Project, Task
+from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats
 
 
 # ===========================================================================
@@ -372,4 +372,106 @@ class TaskAdmin(ModelAdmin):
             'border-radius:10px;font-size:11px;font-weight:bold;">{}</span>',
             colour,
             obj.get_status_display(),
+        )
+
+
+
+# ===========================================================================
+# TaskChecklist Admin
+# ===========================================================================
+
+@admin.register(TaskChecklist)
+class TaskChecklistAdmin(ModelAdmin):
+    list_display = (
+        'title', 'assigned_to', 'created_by', 'status_badge',
+        'submitted_at', 'resolved_at', 'created_at',
+    )
+    list_filter = ('status', 'assigned_to__domain', 'created_at')
+    search_fields = ('title', 'assigned_to__name', 'created_by__name', 'description')
+    autocomplete_fields = ('assigned_to', 'created_by')
+    ordering = ('-created_at',)
+    readonly_fields = ('submitted_at', 'resolved_at', 'created_at', 'updated_at')
+
+    fieldsets = (
+        ('Task Details', {
+            'fields': ('title', 'description', 'assigned_to', 'created_by'),
+        }),
+        ('Workflow Status', {
+            'fields': ('status', 'rejection_feedback'),
+        }),
+        ('Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('submitted_at', 'resolved_at', 'created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colours = {
+            'PENDING':               '#1565c0',
+            'AWAITING_VERIFICATION': '#e65100',
+            'COMPLETED':             '#2e7d32',
+        }
+        colour = colours.get(obj.status, '#616161')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 10px;'
+            'border-radius:12px;font-size:11px;font-weight:bold;">{}</span>',
+            colour,
+            obj.get_status_display(),
+        )
+
+    actions = ['mark_completed', 'reset_to_pending']
+
+    @admin.action(description='Force-complete selected items')
+    def mark_completed(self, request, queryset):
+        from .models import EmployeeStats
+        updated = queryset.update(
+            status='COMPLETED',
+            resolved_at=timezone.now(),
+        )
+        # Recalculate stats for all affected employees
+        for item in queryset.select_related('assigned_to'):
+            EmployeeStats.recalculate_for(item.assigned_to)
+        self.message_user(request, f'{updated} item(s) marked as completed.')
+
+    @admin.action(description='Reset selected items to Pending')
+    def reset_to_pending(self, request, queryset):
+        updated = queryset.update(
+            status='PENDING',
+            submitted_at=None,
+            rejection_feedback='',
+        )
+        self.message_user(request, f'{updated} item(s) reset to Pending.')
+
+
+# ===========================================================================
+# EmployeeStats Admin  (read-only analytics view)
+# ===========================================================================
+
+@admin.register(EmployeeStats)
+class EmployeeStatsAdmin(ModelAdmin):
+    list_display = (
+        'employee', 'total_assigned', 'total_completed',
+        'total_awaiting', 'total_pending',
+        'completion_pct_display', 'last_recalculated',
+    )
+    list_filter  = ('employee__domain',)
+    search_fields = ('employee__name', 'employee__employee_id')
+    ordering = ('-completion_percentage',)
+    readonly_fields = (
+        'employee', 'total_assigned', 'total_completed',
+        'total_pending', 'total_awaiting',
+        'completion_percentage', 'last_recalculated',
+    )
+
+    def has_add_permission(self, request):
+        return False  # rows are created/updated programmatically by signals
+
+    @admin.display(description='Completion %')
+    def completion_pct_display(self, obj):
+        pct = float(obj.completion_percentage)
+        colour = '#2e7d32' if pct >= 75 else ('#e65100' if pct >= 40 else '#c62828')
+        return format_html(
+            '<span style="color:{};font-weight:bold;">{:.1f}%</span>',
+            colour, pct,
         )

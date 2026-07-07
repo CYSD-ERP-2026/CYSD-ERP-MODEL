@@ -21,12 +21,12 @@
 <div class="card premium-card mb-4 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <span class="fw-semibold text-dark" style="font-size: .88rem;">Task Completion Progress</span>
-    <span class="text-muted fw-bold" style="font-size: .88rem;">{{ completed_tasks }} of {{ total_tasks }} completed</span>
+    <span class="text-muted fw-bold" style="font-size: .88rem;">{{ completed_tasks }} of {{ total_tasks }} completed ({{ pct }}%)</span>
   </div>
   <div class="progress" style="height: 10px; border-radius: 5px; background: #e2e8f0;">
     <div class="progress-bar" role="progressbar" 
-         style="width: {% widthratio completed_tasks total_tasks 100 %}%; background: var(--cysd-teal); border-radius: 5px;" 
-         aria-valuenow="{% widthratio completed_tasks total_tasks 100 %}" aria-valuemin="0" aria-valuemax="100">
+         style="width: {{ pct }}%; background: var(--cysd-teal); border-radius: 5px; transition: width .5s ease;" 
+         aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
     </div>
   </div>
 </div>
@@ -54,8 +54,21 @@
         <i class="bi bi-clock-history"></i>
       </div>
       <div>
-        <div class="value text-info">{{ in_progress_tasks }}</div>
-        <div class="label">In Progress</div>
+        <div class="value text-info">{{ pending_tasks }}</div>
+        <div class="label">Pending</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Awaiting Verification -->
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-icon bg-warning-subtle text-warning border border-warning-subtle" style="color: #ea580c !important;">
+        <i class="bi bi-hourglass-split" style="color: #ea580c;"></i>
+      </div>
+      <div>
+        <div class="value" style="color: #ea580c;">{{ awaiting_tasks }}</div>
+        <div class="label">Awaiting Review</div>
       </div>
     </div>
   </div>
@@ -72,19 +85,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Hours Logged -->
-  <div class="col-6 col-md-3">
-    <div class="stat-card">
-      <div class="stat-icon bg-success-subtle text-success border border-success-subtle">
-        <i class="bi bi-hourglass-split"></i>
-      </div>
-      <div>
-        <div class="value text-success">{{ total_hours }}h</div>
-        <div class="label">Hours Logged</div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Task Table Card -->
@@ -93,55 +93,104 @@
     <h6><i class="bi bi-card-checklist me-1"></i> Active Assignments &amp; Deadlines</h6>
   </div>
   <div class="table-responsive">
-    <table class="table table-borderless table-hover align-middle mb-0">
+    <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
       <thead>
         <tr>
-          <th>Task Title</th>
-          <th>Associated Project</th>
-          <th>Due Date</th>
-          <th>Status</th>
-          <th class="text-center">Hours Logged</th>
+          <th>Task / Checklist Item</th>
+          <th>Project / Type</th>
+          <th>Target Date</th>
+          <th>Status / Action</th>
         </tr>
       </thead>
       <tbody>
-        {% for task in tasks %}
+        {% for item in unified_list %}
         <tr>
-          <td>
-            <div class="fw-semibold text-dark">{{ task.title }}</div>
-            <small class="text-muted">Task ID: #{{ task.id }}</small>
+          <td data-label="Task / Checklist Item">
+            <div class="d-flex align-items-start gap-2">
+              {% if item.is_checklist %}
+                <!-- Checklist Checkbox Column -->
+                <div class="flex-shrink-0 pt-1" style="min-width:32px; min-height:44px; display:flex; align-items:center; justify-content:center;">
+                  {% if item.status == 'pending' %}
+                     <!-- Checkbox form to submit for verification -->
+                    <form method="post" action="{% url 'tracker:checklist_submit' item.id %}" class="m-0 p-0"
+                          data-cysd-confirm="Submit '{{ item.title|escapejs }}' for supervisor verification?">
+                      {% csrf_token %}
+                      <button
+                        type="submit"
+                        class="btn p-0 border-0 bg-transparent"
+                        title="Mark as done and submit for verification"
+                        style="width:28px;height:28px;cursor:pointer;"
+                      >
+                        <i class="bi bi-square text-secondary" style="font-size:1.4rem;"></i>
+                      </button>
+                    </form>
+                  {% elif item.status == 'awaiting_verification' %}
+                    <span title="Waiting for supervisor verification" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+                      <i class="bi bi-dash-square-fill" style="font-size:1.4rem;color:#ea580c;"></i>
+                    </span>
+                  {% else %}
+                    <span title="Approved by supervisor" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+                      <i class="bi bi-check-square-fill" style="font-size:1.4rem;color:#16a34a;"></i>
+                    </span>
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="flex-shrink-0 pt-1 text-secondary" style="min-width:32px; min-height:44px; display:flex; align-items:center; justify-content:center;">
+                  <i class="bi bi-briefcase-fill" style="font-size:1.2rem; color: var(--cysd-navy);"></i>
+                </div>
+              {% endif %}
+              
+              <div>
+                <div class="fw-semibold text-dark">{{ item.title }}</div>
+                {% if item.is_checklist %}
+                  <small class="text-muted" style="font-size: 0.76rem;">Checklist Item #{{ item.id }}{% if item.creator %} · Assigned by {{ item.creator }}{% endif %}</small>
+                  {% if item.description %}
+                    <div class="text-muted small mt-1" style="font-size: 0.8rem; line-height: 1.4;">{{ item.description }}</div>
+                  {% endif %}
+                {% else %}
+                  <small class="text-muted" style="font-size: 0.76rem;">Task ID: #{{ item.id }}</small>
+                {% endif %}
+              </div>
+            </div>
           </td>
-          <td>
-            <span class="badge bg-light text-dark border">{{ task.project.title }}</span>
-          </td>
-          <td>
-            {% if task.status == 'overdue' %}
-              <span class="text-danger fw-bold"><i class="bi bi-calendar-x me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
-            {% elif task.status == 'completed' %}
-              <span class="text-success text-opacity-75"><i class="bi bi-calendar-check me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
+          
+          <td data-label="Project / Type">
+            {% if item.is_checklist %}
+              <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-semibold rounded-pill px-2">Checklist</span>
             {% else %}
-              <span class="text-secondary"><i class="bi bi-calendar3 me-1"></i>{{ task.due_date|date:"M d, Y" }}</span>
+              <span class="badge bg-light text-dark border">{{ item.project_title }}</span>
             {% endif %}
           </td>
-          <td>
-            {% if task.status == 'completed' %}
+          
+          <td data-label="Target Date">
+            <small class="text-muted d-block" style="font-size: 0.7rem;">{{ item.date_label }}</small>
+            <span class="fw-medium text-dark">{{ item.date|date:"d M Y" }}</span>
+          </td>
+          
+          <td data-label="Status / Action">
+            {% if item.status == 'completed' %}
               <span class="badge bg-success-subtle text-success border border-success-subtle fw-semibold rounded-pill px-2">Completed</span>
-            {% elif task.status == 'in_progress' %}
+            {% elif item.status == 'in_progress' %}
               <span class="badge bg-info-subtle text-info border border-info-subtle fw-semibold rounded-pill px-2">In Progress</span>
-            {% elif task.status == 'overdue' %}
+            {% elif item.status == 'overdue' %}
               <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold rounded-pill px-2">Overdue</span>
+            {% elif item.status == 'awaiting_verification' %}
+              <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                    style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:.72rem;padding: .2rem .6rem;">
+                <span class="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"
+                      style="width:.4rem;height:.4rem;color:#ea580c;"></span>
+                Waiting Verification
+              </span>
             {% else %}
               <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold rounded-pill px-2">Pending</span>
             {% endif %}
           </td>
-          <td class="text-center fw-bold text-dark">
-            {{ task.hours_logged }} hrs
-          </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="5" class="text-center text-muted py-5">
+          <td colspan="4" class="text-center text-muted py-5">
             <i class="bi bi-emoji-smile fs-1 mb-2 d-block text-secondary"></i>
-            You don't have any tasks assigned to you currently. Keep up the great work!
+            You don't have any tasks or checklist items assigned to you currently. Keep up the great work!
           </td>
         </tr>
         {% endfor %}
