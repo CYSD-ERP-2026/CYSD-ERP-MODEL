@@ -5,6 +5,7 @@ CYSD ERP Dashboard - NGO Enterprise Resource Planning System
 """
 from pathlib import Path
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -14,6 +15,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Initialize environ
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
+    DJANGO_SECURE_SSL_REDIRECT=(bool, False),
+    DJANGO_SECURE_HSTS_SECONDS=(int, 0),
+    DJANGO_SESSION_COOKIE_SECURE=(bool, False),
+    DJANGO_CSRF_COOKIE_SECURE=(bool, False),
 )
 # Read environment variables from .env file if it exists
 environ.Env.read_env(str(BASE_DIR / '.env'))
@@ -21,8 +26,10 @@ environ.Env.read_env(str(BASE_DIR / '.env'))
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env.bool('DJANGO_DEBUG', default=False)
+SECRET_KEY = env('DJANGO_SECRET_KEY', default='django-insecure-change-me-in-production')
+if not DEBUG and SECRET_KEY.startswith('django-insecure-') and not env.bool('DJANGO_ALLOW_INSECURE_DEFAULT_SECRET', default=False):
+    raise ImproperlyConfigured('Set a strong DJANGO_SECRET_KEY for production deployments.')
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 if DEBUG:
     # Allow any host during development/debugging (e.g., ngrok tunnels)
@@ -36,6 +43,20 @@ if DEBUG:
         'https://*.ngrok-free.dev',
         'https://*.ngrok.io',
     ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int('DJANGO_SECURE_HSTS_SECONDS', default=0 if DEBUG else 31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SESSION_COOKIE_SECURE = env.bool('DJANGO_SESSION_COOKIE_SECURE', default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool('DJANGO_CSRF_COOKIE_SECURE', default=not DEBUG)
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
 
 # ---------------------------------------------------------------------------
 # Application definition
@@ -117,6 +138,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
 ]
 
 # ---------------------------------------------------------------------------

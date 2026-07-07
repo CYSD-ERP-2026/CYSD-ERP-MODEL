@@ -10,3 +10,4 @@ pandas>=2.0.0
 matplotlib>=3.5.0
 django-environ>=0.11.0
 gunicorn>=21.0.0
+argon2-cffi>=23.1.0

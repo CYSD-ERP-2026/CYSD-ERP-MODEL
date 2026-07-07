@@ -8,9 +8,44 @@ Models:
     Employee – Staff / volunteer record linked to a Domain
     Meeting  – Scheduled / completed meeting record linked to a Domain
 """
+from pathlib import Path
+
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024
+ALLOWED_DOCUMENT_EXTENSIONS = {'.pdf', '.doc', '.docx', '.txt', '.xls', '.xlsx', '.ppt', '.pptx'}
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+
+def validate_upload_size(upload):
+    if upload and getattr(upload, 'size', 0) > MAX_UPLOAD_SIZE:
+        raise ValidationError(f'File size exceeds the {MAX_UPLOAD_SIZE // (1024 * 1024)}MB limit.')
+    return upload
+
+
+def validate_document_file(upload):
+    if not upload:
+        return upload
+    validate_upload_size(upload)
+    filename = getattr(upload, 'name', '') or ''
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise ValidationError('Unsupported document type. Use PDF, DOC, DOCX, TXT, XLS, XLSX, PPT, or PPTX.')
+    return upload
+
+
+def validate_image_file(upload):
+    if not upload:
+        return upload
+    validate_upload_size(upload)
+    filename = getattr(upload, 'name', '') or ''
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValidationError('Unsupported image type. Use JPG, JPEG, PNG, or WEBP.')
+    return upload
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +176,7 @@ class Employee(models.Model):
         upload_to='employees/photos/',
         null=True,
         blank=True,
+        validators=[validate_image_file],
     )
 
     # Role & placement
@@ -300,6 +336,7 @@ class Meeting(models.Model):
         upload_to='meetings/attachments/',
         null=True,
         blank=True,
+        validators=[validate_document_file],
         help_text='Upload meeting agenda, minutes document, or presentation',
     )
 
