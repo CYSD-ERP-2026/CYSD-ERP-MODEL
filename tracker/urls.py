@@ -12,6 +12,7 @@ urlpatterns = [
     path('employee-analytics/', views.employee_performance_view, name='employee_analytics'),
     path('my-tasks/', views.my_tasks_view, name='my_tasks'),
     path('export/', views.export_meetings_csv, name='export_meetings_csv'),
+    path('setup-organization/', views.setup_organization_view, name='setup_organization'),
 
     # ── Task Checklist ────────────────────────────────────────────────────
     path('checklist/', views.my_tasks_view, name='checklist_employee'),

@@ -5,8 +5,8 @@
 <!-- Top bar -->
 <div class="topbar">
   <div>
-    <h4><i class="bi bi-diagram-3 me-2"></i>Programme Domains</h4>
-    <span class="meta">View and manage NGO thematic programme areas</span>
+    <h4><i class="bi bi-diagram-3 me-2"></i>Business &amp; Operations Domains</h4>
+    <span class="meta">View and manage operating domains and departments</span>
   </div>
   {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' %}
   <a href="{% url 'admin:tracker_domain_add' %}" class="btn btn-export">
@@ -94,7 +94,7 @@
           <h5 class="modal-title text-white mb-0" id="domain-modal-label-{{ d.id }}">
             <i class="bi bi-diagram-3 me-2"></i>{{ d.name }}
           </h5>
-          <small class="text-white-50">Programme Domain Details</small>
+          <small class="text-white-50">Department Domain Details</small>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>

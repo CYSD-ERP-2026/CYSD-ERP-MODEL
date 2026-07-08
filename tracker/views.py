@@ -18,7 +18,7 @@ from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats
+from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats, Enterprise
 
 CACHE_TTL_SECONDS = 300
 
@@ -28,14 +28,14 @@ def dashboard_view(request):
     """Main analytics dashboard."""
 
     # --- Summary counts ---
-    total_domains = Domain.objects.filter(is_active=True).count()
-    total_employees = Employee.objects.filter(is_active=True).count()
-    total_meetings = Meeting.objects.count()
-    completed_meetings = Meeting.objects.filter(status='completed').count()
+    total_domains = Domain.objects.filter(enterprise=request.tenant, is_active=True).count()
+    total_employees = Employee.objects.filter(enterprise=request.tenant, is_active=True).count()
+    total_meetings = Meeting.objects.filter(enterprise=request.tenant).count()
+    completed_meetings = Meeting.objects.filter(enterprise=request.tenant, status='completed').count()
 
     # --- Aggregation 1: meetings grouped by domain name ---
     by_domain_qs = (
-        Meeting.objects
+        Meeting.objects.filter(enterprise=request.tenant)
         .values('domain__name')
         .annotate(total=Count('id'))
         .order_by('domain__name')
@@ -51,7 +51,7 @@ def dashboard_view(request):
 
     # --- Aggregation 2: meetings grouped by intervention_scale ---
     by_scale_qs = (
-        Meeting.objects
+        Meeting.objects.filter(enterprise=request.tenant)
         .values('intervention_scale')
         .annotate(total=Count('id'))
         .order_by('intervention_scale')
@@ -68,7 +68,7 @@ def dashboard_view(request):
 
     # --- Recent meetings for the activity table ---
     recent_meetings = (
-        Meeting.objects
+        Meeting.objects.filter(enterprise=request.tenant)
         .select_related('domain')
         .order_by('-date', '-start_time')[:10]
     )
@@ -91,15 +91,15 @@ def dashboard_view(request):
     if role in ('founder', 'hr', 'supervisor'):
         if role == 'supervisor' and profile:
             subordinate_ids = list(
-                Employee.objects.filter(supervisor=profile).values_list('id', flat=True)
+                Employee.objects.filter(enterprise=request.tenant, supervisor=profile).values_list('id', flat=True)
             )
             awaiting_verification_count = TaskChecklist.objects.filter(
-                assigned_to__id__in=subordinate_ids, status='AWAITING_VERIFICATION'
+                enterprise=request.tenant, assigned_to__id__in=subordinate_ids, status='AWAITING_VERIFICATION'
             ).count()
         else:
             # founder/hr/superuser can verify all
             awaiting_verification_count = TaskChecklist.objects.filter(
-                status='AWAITING_VERIFICATION'
+                enterprise=request.tenant, status='AWAITING_VERIFICATION'
             ).count()
 
     # Personal checklist progress snapshot
@@ -114,7 +114,7 @@ def dashboard_view(request):
                 'percentage': float(stats_row.completion_percentage),
             }
         else:
-            personal_items = TaskChecklist.objects.filter(assigned_to=profile)
+            personal_items = TaskChecklist.objects.filter(enterprise=request.tenant, assigned_to=profile)
             p_total = personal_items.count()
             if p_total > 0:
                 p_comp = personal_items.filter(status='COMPLETED').count()
@@ -158,7 +158,7 @@ def export_meetings_csv(request):
     writer.writerow(['Title', 'Date', 'Domain', 'Intervention Scale', 'Type', 'Status', 'Venue', 'Organised By'])
 
     meetings = (
-        Meeting.objects
+        Meeting.objects.filter(enterprise=request.tenant)
         .select_related('domain')
         .order_by('-date', '-start_time')
     )
@@ -186,7 +186,7 @@ def export_meetings_csv(request):
 def domains_list_view(request):
     """List all domains. Active employee count resolved via annotation to avoid N+1."""
     domains = (
-        Domain.objects
+        Domain.objects.filter(enterprise=request.tenant)
         .annotate(emp_count=Count('employees', filter=models.Q(employees__is_active=True)))
         .order_by('name')
     )
@@ -203,7 +203,7 @@ def employees_list_view(request):
     from .filters import EmployeeFilter
 
     qs = (
-        Employee.objects
+        Employee.objects.filter(enterprise=request.tenant)
         .select_related('domain')
         .order_by('name')
     )
@@ -222,7 +222,7 @@ def meetings_list_view(request):
     from .filters import MeetingFilter
 
     qs = (
-        Meeting.objects
+        Meeting.objects.filter(enterprise=request.tenant)
         .select_related('domain')
         .prefetch_related('attendees')
         .order_by('-date', '-start_time')
@@ -250,17 +250,17 @@ def meetings_list_view(request):
 def policy_analytics_view(request):
     """View to analyze policy intervention scales using Pandas and Chart.js with caching."""
     # Organization-wide analytics cached using aggregate meeting count and latest update token
-    meetings_count = Meeting.objects.count()
-    latest_meeting = Meeting.objects.aggregate(latest=Max('updated_at'))['latest']
+    meetings_count = Meeting.objects.filter(enterprise=request.tenant).count()
+    latest_meeting = Meeting.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_token = latest_meeting.isoformat() if latest_meeting else 'none'
-    cache_key = f"policy_analytics:{meetings_count}:{latest_token}"
+    cache_key = f"policy_analytics:{request.tenant.subdomain}:{meetings_count}:{latest_token}"
     
     context = cache.get(cache_key)
     if context is not None:
         return render(request, 'analytics.html', context)
         
     # Query meetings (select_related for domain optimization)
-    meetings_qs = Meeting.objects.select_related('domain').values(
+    meetings_qs = Meeting.objects.filter(enterprise=request.tenant).select_related('domain').values(
         'intervention_scale', 'domain__name'
     )
     
@@ -333,16 +333,16 @@ def employee_performance_view(request):
     # 1. User role & ID (for Row-Level Security)
     # 2. Total active tasks & latest update
     # 3. Total active projects & latest update
-    tasks_count = Task.objects.count()
-    latest_task_update = Task.objects.aggregate(latest=Max('updated_at'))['latest']
+    tasks_count = Task.objects.filter(enterprise=request.tenant).count()
+    latest_task_update = Task.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_task_token = latest_task_update.isoformat() if latest_task_update else 'none'
     
-    projects_count = Project.objects.count()
-    latest_proj_update = Project.objects.aggregate(latest=Max('updated_at'))['latest']
+    projects_count = Project.objects.filter(enterprise=request.tenant).count()
+    latest_proj_update = Project.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_proj_token = latest_proj_update.isoformat() if latest_proj_update else 'none'
     
     cache_key = (
-        f"emp_perf:{role}:{request.user.id}:"
+        f"emp_perf:{request.tenant.subdomain}:{role}:{request.user.id}:"
         f"{tasks_count}:{latest_task_token}:"
         f"{projects_count}:{latest_proj_token}"
     )
@@ -351,17 +351,17 @@ def employee_performance_view(request):
     if context is not None:
         return render(request, 'employee_analytics.html', context)
 
-    # Enforce Row-Level Security: Filter base querysets based on role
+    # Enforce Row-Level Security: Filter base querysets based on role and scope to request.tenant
     if role in ['founder', 'hr']:
-        tasks_qs = Task.objects.all()
-        employees_base_qs = Employee.objects.filter(is_active=True)
+        tasks_qs = Task.objects.filter(enterprise=request.tenant)
+        employees_base_qs = Employee.objects.filter(enterprise=request.tenant, is_active=True)
     elif role == 'supervisor':
-        tasks_qs = Task.objects.filter(assigned_to__supervisor=profile)
-        employees_base_qs = Employee.objects.filter(supervisor=profile, is_active=True)
+        tasks_qs = Task.objects.filter(enterprise=request.tenant, assigned_to__supervisor=profile)
+        employees_base_qs = Employee.objects.filter(enterprise=request.tenant, supervisor=profile, is_active=True)
     else:
         allowed_ids = [profile.id] if profile else []
-        tasks_qs = Task.objects.filter(assigned_to__in=allowed_ids)
-        employees_base_qs = Employee.objects.filter(id__in=allowed_ids, is_active=True)
+        tasks_qs = Task.objects.filter(enterprise=request.tenant, assigned_to__in=allowed_ids)
+        employees_base_qs = Employee.objects.filter(enterprise=request.tenant, id__in=allowed_ids, is_active=True)
 
     # 1. Workload Chart: Active tasks per employee
     from django.db.models import Count, Q
@@ -753,7 +753,7 @@ def my_tasks_view(request):
         return redirect('tracker:dashboard')
 
     # Get all tasks assigned to this employee
-    tasks = Task.objects.filter(assigned_to=profile).select_related('project').order_by('due_date')
+    tasks = Task.objects.filter(enterprise=request.tenant, assigned_to=profile).select_related('project').order_by('due_date')
 
     # Calculate summary statistics for standard tasks
     total_tasks = tasks.count()
@@ -766,7 +766,7 @@ def my_tasks_view(request):
     total_hours = sum(t.hours_logged for t in tasks)
 
     # Get checklist items assigned to this employee
-    checklists = TaskChecklist.objects.filter(assigned_to=profile).select_related('created_by').order_by('-created_at')
+    checklists = TaskChecklist.objects.filter(enterprise=request.tenant, assigned_to=profile).select_related('created_by').order_by('-created_at')
     unchecked_checklists = checklists.filter(status='PENDING')
     awaiting_checklists = checklists.filter(status='AWAITING_VERIFICATION')
     completed_checklists = checklists.filter(status='COMPLETED')
@@ -907,12 +907,12 @@ def checklist_supervisor_view(request):
 
     if role == 'supervisor':
         subordinate_ids = list(
-            Employee.objects.filter(supervisor=profile).values_list('id', flat=True)
+            Employee.objects.filter(enterprise=request.tenant, supervisor=profile).values_list('id', flat=True)
         )
-        base_qs = TaskChecklist.objects.filter(assigned_to__id__in=subordinate_ids)
+        base_qs = TaskChecklist.objects.filter(enterprise=request.tenant, assigned_to__id__in=subordinate_ids)
     else:
-        # founder / hr see the entire organization
-        base_qs = TaskChecklist.objects.all()
+        # founder / hr see the entire organization (scoped to tenant)
+        base_qs = TaskChecklist.objects.filter(enterprise=request.tenant)
 
     awaiting_items = (
         base_qs
@@ -929,10 +929,10 @@ def checklist_supervisor_view(request):
     # Per-employee stats snapshot for the summary cards
     if role == 'supervisor':
         team_employees = Employee.objects.filter(
-            supervisor=profile, is_active=True
+            enterprise=request.tenant, supervisor=profile, is_active=True
         ).prefetch_related('stats')
     else:
-        team_employees = Employee.objects.filter(is_active=True).prefetch_related('stats')
+        team_employees = Employee.objects.filter(enterprise=request.tenant, is_active=True).prefetch_related('stats')
 
     context = {
         'awaiting_items':  awaiting_items,
@@ -1023,3 +1023,44 @@ def checklist_resolve_view(request, item_id):
         return redirect('tracker:checklist_supervisor')
 
     return redirect('tracker:checklist_supervisor')
+
+
+@login_required
+def setup_organization_view(request):
+    """
+    Onboarding/setup view for the Enterprise ERP Manager/Superuser.
+    Allows editing details of the current tenant (Enterprise).
+    """
+    from django.contrib import messages
+    from .forms import EnterpriseForm
+    
+    profile_role = getattr(request.user, 'employee_profile', None)
+    is_authorized = request.user.is_superuser or (profile_role and profile_role.role in ('founder', 'hr'))
+    
+    tenant = getattr(request, 'tenant', None)
+    if not tenant:
+        return redirect('tracker:dashboard')
+        
+    if not is_authorized:
+        return render(request, 'tracker/setup_organization.html', {
+            'profile': tenant,
+            'is_authorized': False,
+        })
+    
+    if request.method == 'POST':
+        form = EnterpriseForm(request.POST, request.FILES, instance=tenant)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Enterprise settings updated successfully!")
+            return redirect('tracker:dashboard')
+    else:
+        form = EnterpriseForm(instance=tenant)
+        
+    return render(request, 'tracker/setup_organization.html', {
+        'form': form,
+        'profile': tenant,
+        'is_authorized': True,
+    })
+
+
+

@@ -58,6 +58,12 @@ class Domain(models.Model):
 
     Example domains: Education, Health, Livelihood, WASH, Child Protection.
     """
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
     name = models.CharField(
         max_length=150,
         unique=True,
@@ -134,6 +140,12 @@ class Employee(models.Model):
     Each employee belongs to one primary Domain and has a designation,
     contact details, and employment metadata.
     """
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -274,6 +286,12 @@ class Meeting(models.Model):
 
     Stores agenda, attendees, action points, and outcome notes.
     """
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
     title = models.CharField(
         max_length=250,
         help_text='Short, descriptive title of the meeting',
@@ -386,6 +404,12 @@ TASK_STATUS_CHOICES = [
 
 
 class Project(models.Model):
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
     title = models.CharField(max_length=250, help_text="Title of the project")
     domain = models.ForeignKey(
         Domain,
@@ -423,6 +447,12 @@ class Project(models.Model):
 
 
 class Task(models.Model):
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
     title = models.CharField(max_length=250, help_text="Task description / title")
     project = models.ForeignKey(
         Project,
@@ -488,6 +518,12 @@ class TaskChecklist(models.Model):
       • A supervisor may only assign tasks to their own direct subordinates.
       • A founder / hr may assign to anyone.
     """
+    enterprise = models.ForeignKey(
+        'Enterprise',
+        on_delete=models.CASCADE,
+        related_name='%(class)ss',
+        null=False,
+    )
 
     title = models.CharField(
         max_length=250,
@@ -657,4 +693,37 @@ class EmployeeStats(models.Model):
             },
         )
         return stats
+
+
+class Enterprise(models.Model):
+    """
+    Represents a tenant enterprise in the multi-tenant system.
+    """
+    name = models.CharField(
+        max_length=255,
+        help_text='Name of the enterprise'
+    )
+    subdomain = models.CharField(
+        max_length=63,
+        unique=True,
+        help_text='Unique subdomain for routing (e.g. "cysd")'
+    )
+    logo = models.ImageField(
+        upload_to='organization/logos/',
+        blank=True,
+        null=True,
+        validators=[validate_image_file],
+        help_text='Upload the enterprise logo'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Enterprise'
+        verbose_name_plural = 'Enterprises'
+
+    def __str__(self):
+        return f"{self.name} ({self.subdomain})"
+
+
 

@@ -5,8 +5,8 @@
 <!-- Top bar -->
 <div class="topbar">
   <div>
-    <h4><i class="bi bi-bar-chart-line me-2"></i>Policy Intervention Analytics</h4>
-    <span class="meta">Cross-tabulation and stacked distribution of policy intervention scales across programme domains</span>
+    <h4><i class="bi bi-bar-chart-line me-2"></i>Scope &amp; Scale Analytics</h4>
+    <span class="meta">Cross-tabulation and stacked distribution of operational scales across departments and domains</span>
   </div>
 </div>
 
@@ -16,7 +16,7 @@
     <div class="chart-card premium-card">
       <div class="card-title">
         <i class="bi bi-bar-chart-steps me-1" style="color:var(--cysd-teal);"></i>
-        Intervention Scales Stacked Distribution
+        Operational Scales Stacked Distribution
       </div>
       <div class="py-2">
         {% if chart_data_json != '{}' %}
@@ -26,7 +26,7 @@
         {% else %}
           <div class="py-5 text-center text-muted">
             <i class="bi bi-database-exclamation fs-1 mb-3"></i>
-            <p>No meeting data is currently available. Please add meetings with domains and intervention scales in the admin panel to view analytics.</p>
+            <p>No meeting data is currently available. Please add meetings with domains and operational scales in the admin panel to view analytics.</p>
           </div>
         {% endif %}
       </div>
@@ -45,7 +45,7 @@
         </div>
         <div class="mt-3 text-muted" style="font-size: .8rem; line-height: 1.5;">
           <i class="bi bi-info-circle me-1"></i>
-          This grid counts the occurrences of meetings mapping each <strong>Intervention Scale</strong> (rows) against its associated <strong>Thematic Domain</strong> (columns).
+          This grid counts the occurrences of meetings mapping each <strong>Operational Scale</strong> (rows) against its associated <strong>Business Domain</strong> (columns).
         </div>
       </div>
     </div>
@@ -57,33 +57,33 @@
   <div class="col-12">
     <div class="card premium-card p-4">
       <h5 class="fw-bold mb-3" style="color: var(--cysd-navy);">
-        <i class="bi bi-info-circle-fill me-2 text-primary"></i>Understanding Policy Intervention Analytics
+        <i class="bi bi-info-circle-fill me-2 text-primary"></i>Understanding Scope &amp; Scale Analytics
       </h5>
       <p class="text-secondary" style="font-size: 0.92rem; line-height: 1.6;">
-        This analytical dashboard maps the geographic and operational scope of our meetings (Intervention Scales) against our programmatic departments (Thematic Domains). By examining this intersection, leadership can visualize whether specific domains are primarily operational at the grassroots level or engaged in high-level advocacy.
+        This analytical dashboard maps the geographic and operational scope of meetings (Scales) against departments (Domains). By examining this intersection, leadership can visualize whether specific domains are primarily focused on localized execution or engaged in high-level strategic alignment.
       </p>
       <div class="row g-3 mt-1">
         <div class="col-12 col-md-4">
           <div class="p-3 rounded bg-light border-start border-primary border-3 h-100">
-            <h6 class="fw-bold text-dark"><i class="bi bi-people me-1"></i> Grassroots Level</h6>
+            <h6 class="fw-bold text-dark"><i class="bi bi-people me-1"></i> Local Execution</h6>
             <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-              <strong>Individual &amp; Community</strong> scales represent direct programmatic delivery and localized stakeholder mobilization. High volumes here show a strong field presence and citizen-centric execution.
+              <strong>Individual &amp; Community</strong> scales represent direct localized delivery and team mobilization. High volumes here show a strong field presence and citizen/client-centric execution.
             </p>
           </div>
         </div>
         <div class="col-12 col-md-4">
           <div class="p-3 rounded bg-light border-start border-info border-3 h-100">
-            <h6 class="fw-bold text-dark"><i class="bi bi-geo-alt me-1"></i> Regional Level</h6>
+            <h6 class="fw-bold text-dark"><i class="bi bi-geo-alt me-1"></i> Regional Operations</h6>
             <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-              <strong>District</strong> scale indicators show middle-tier execution, capacity building of local bodies, block-level coordination, and departmental alignment with local government agencies.
+              <strong>District</strong> scale indicators show middle-tier execution, regional capacity building, and alignment with regional operations and agencies.
             </p>
           </div>
         </div>
         <div class="col-12 col-md-4">
           <div class="p-3 rounded bg-light border-start border-warning border-3 h-100">
-            <h6 class="fw-bold text-dark"><i class="bi bi-bank me-1"></i> Macro Policy Level</h6>
+            <h6 class="fw-bold text-dark"><i class="bi bi-bank me-1"></i> Strategic Alignment</h6>
             <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-              <strong>State &amp; National</strong> scales track state-wide reviews, national coalition building, and legislative policy reviews. This represents system-strengthening and advocacy efforts.
+              <strong>State &amp; National</strong> scales track state-wide reviews, national partnership building, and strategic alignment. This represents system-strengthening and advocacy efforts.
             </p>
           </div>
         </div>

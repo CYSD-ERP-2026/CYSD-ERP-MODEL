@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CYSD ERP - {% block title %}Dashboard{% endblock %}</title>
+  <title>{{ enterprise_name }} - {% block title %}Dashboard{% endblock %}</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -24,6 +24,18 @@
   />
   <link href="{% static 'tracker/css/app.css' %}" rel="stylesheet" />
   {% block extra_css %}{% endblock %}
+  {% if not request.tenant %}
+  <style>
+    .sidebar, .mobile-header {
+      display: none !important;
+    }
+    .main {
+      margin-left: 0 !important;
+      padding: 0 !important;
+      background: #f8fafc;
+    }
+  </style>
+  {% endif %}
 </head>
 
 <body>
@@ -41,7 +53,7 @@
         <i class="bi bi-list fs-2"></i>
       </button>
       <div>
-        <div class="mobile-title text-white">CYSD ERP</div>
+        <div class="mobile-title text-white">{{ enterprise_name }}</div>
         <div class="text-white-50" style="font-size:.72rem;">Enterprise Operations</div>
       </div>
     </div>
@@ -54,10 +66,14 @@
   <aside id="sidebar" class="sidebar" aria-label="Primary navigation">
     <div class="sidebar-brand">
       <div class="d-flex align-items-center gap-3">
-        <div class="brand-mark">C</div>
+        {% if enterprise_logo %}
+          <img src="{{ enterprise_logo }}" alt="{{ enterprise_name }}" style="max-height: 40px; max-width: 40px; border-radius: 8px; object-fit: contain;">
+        {% else %}
+          <div class="brand-mark">{{ enterprise_name|slice:":1"|upper }}</div>
+        {% endif %}
         <div>
-          <h5 class="brand-title">CYSD ERP</h5>
-          <span class="brand-subtitle">Centre for Youth &amp; Social Development</span>
+          <h5 class="brand-title">{{ enterprise_name }}</h5>
+          <span class="brand-subtitle">Enterprise ERP</span>
         </div>
       </div>
     </div>

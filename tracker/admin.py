@@ -17,7 +17,58 @@ from unfold.admin import ModelAdmin, TabularInline
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats
+from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats, Enterprise
+
+
+# ===========================================================================
+# Enterprise Admin
+# ===========================================================================
+
+@admin.register(Enterprise)
+class EnterpriseAdmin(ModelAdmin):
+    list_display = ('name', 'subdomain', 'created_at', 'updated_at')
+    search_fields = ('name', 'subdomain')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+class TenantBaseAdmin(ModelAdmin):
+    """
+    Base Admin class that enforces tenant isolation in Django Admin.
+    Filters list querysets, saves records to request.tenant, and filters dropdowns.
+    """
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if getattr(request, 'tenant', None):
+            if hasattr(qs.model, 'enterprise'):
+                return qs.filter(enterprise=request.tenant)
+            elif hasattr(qs.model, 'employee'):
+                return qs.filter(employee__enterprise=request.tenant)
+        return qs
+
+    def save_model(self, request, obj, form, change):
+        if getattr(request, 'tenant', None) and hasattr(obj, 'enterprise'):
+            obj.enterprise = request.tenant
+        super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = super().get_readonly_fields(request, obj) or ()
+        if hasattr(self.model, 'enterprise') and 'enterprise' not in readonly:
+            return list(readonly) + ['enterprise']
+        return readonly
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if getattr(request, 'tenant', None):
+            related_model = db_field.related_model
+            if hasattr(related_model, 'enterprise'):
+                kwargs["queryset"] = related_model.objects.filter(enterprise=request.tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if getattr(request, 'tenant', None):
+            related_model = db_field.related_model
+            if hasattr(related_model, 'enterprise'):
+                kwargs["queryset"] = related_model.objects.filter(enterprise=request.tenant)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 # ===========================================================================
@@ -25,7 +76,7 @@ from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, Emp
 # ===========================================================================
 
 @admin.register(Domain)
-class DomainAdmin(ModelAdmin):
+class DomainAdmin(TenantBaseAdmin):
     list_display = ('name', 'code', 'lead', 'active_employee_count_display', 'is_active', 'created_at')
     list_display_links = ('name',)
     list_filter = ('is_active',)
@@ -132,7 +183,7 @@ class EmployeeAdminForm(forms.ModelForm):
 
 
 @admin.register(Employee)
-class EmployeeAdmin(ModelAdmin):
+class EmployeeAdmin(TenantBaseAdmin):
     form = EmployeeAdminForm
     list_display = (
         'employee_id', 'name', 'role', 'supervisor', 'domain', 'designation',
@@ -218,7 +269,7 @@ class MeetingAttendeeInline(TabularInline):
 
 
 @admin.register(Meeting)
-class MeetingAdmin(ModelAdmin):
+class MeetingAdmin(TenantBaseAdmin):
     list_display = (
         'title', 'domain', 'meeting_type', 'status_badge',
         'date', 'start_time', 'venue', 'attendee_count_display', 'organised_by',
@@ -289,7 +340,7 @@ class MeetingAdmin(ModelAdmin):
 # ===========================================================================
 
 @admin.register(Project)
-class ProjectAdmin(ModelAdmin):
+class ProjectAdmin(TenantBaseAdmin):
     list_display = ('title', 'domain', 'start_date', 'deadline', 'status_badge', 'lead_employee')
     list_filter = ('status', 'domain', 'start_date', 'deadline')
     search_fields = ('title', 'domain__name', 'lead_employee__name')
@@ -332,7 +383,7 @@ class ProjectAdmin(ModelAdmin):
 # ===========================================================================
 
 @admin.register(Task)
-class TaskAdmin(ModelAdmin):
+class TaskAdmin(TenantBaseAdmin):
     list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge', 'hours_logged')
     list_filter = ('status', 'project', 'assigned_to', 'due_date')
     search_fields = ('title', 'project__title', 'assigned_to__name')
@@ -381,7 +432,7 @@ class TaskAdmin(ModelAdmin):
 # ===========================================================================
 
 @admin.register(TaskChecklist)
-class TaskChecklistAdmin(ModelAdmin):
+class TaskChecklistAdmin(TenantBaseAdmin):
     list_display = (
         'title', 'assigned_to', 'created_by', 'status_badge',
         'submitted_at', 'resolved_at', 'created_at',
@@ -449,7 +500,7 @@ class TaskChecklistAdmin(ModelAdmin):
 # ===========================================================================
 
 @admin.register(EmployeeStats)
-class EmployeeStatsAdmin(ModelAdmin):
+class EmployeeStatsAdmin(TenantBaseAdmin):
     list_display = (
         'employee', 'total_assigned', 'total_completed',
         'total_awaiting', 'total_pending',

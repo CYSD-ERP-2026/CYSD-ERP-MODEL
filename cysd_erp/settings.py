@@ -86,6 +86,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'tracker.middleware.TenantMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -103,6 +104,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'tracker.context_processors.organization_context',
             ],
         },
     },
@@ -196,8 +198,8 @@ LOGOUT_REDIRECT_URL = '/accounts/login/'
 # Unfold Admin Theme Configuration
 # ---------------------------------------------------------------------------
 UNFOLD = {
-    "SITE_TITLE": "CYSD ERP Admin",
-    "SITE_HEADER": "CYSD ERP Administration",
+    "SITE_TITLE": "Enterprise ERP Admin",
+    "SITE_HEADER": "Enterprise ERP Administration",
     "SITE_URL": "/dashboard/",
     "SIDEBAR": {
         "show_search": True,

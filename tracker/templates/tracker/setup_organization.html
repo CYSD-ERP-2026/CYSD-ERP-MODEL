@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Enterprise Setup{% endblock %}
+
+{% block content %}
+<div class="container d-flex align-items-center justify-content-center" style="min-height: 100vh; padding: 2rem 1rem;">
+  <div class="card shadow-lg border-0 overflow-hidden" style="max-width: 580px; width: 100%; border-radius: 20px; background: #ffffff;">
+    
+    <!-- Decorative Accent Banner -->
+    <div style="height: 12px; background: linear-gradient(90deg, #0f172a 0%, #1e293b 50%, #3b82f6 100%);"></div>
+
+    <div class="card-body p-5">
+      {% if is_authorized %}
+        <div class="text-center mb-4">
+          <div class="d-inline-flex align-items-center justify-content-center bg-light rounded-circle mb-3" style="width: 80px; height: 80px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);">
+            <i class="bi bi-sliders fs-1" style="color: #0f172a;"></i>
+          </div>
+          <h2 class="fw-extrabold text-dark mb-2" style="font-family: 'Outfit', 'Inter', sans-serif; letter-spacing: -0.5px;">Enterprise Onboarding</h2>
+          <p class="text-muted fs-6">Let's configure your ERP brand name and corporate logo. These will be applied globally across all templates and reports.</p>
+        </div>
+
+        {% if messages %}
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show border-0 shadow-sm" role="alert" style="border-radius: 12px;">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+          {% csrf_token %}
+          
+          <!-- Enterprise Name Field -->
+          <div class="mb-4">
+            <label for="id_enterprise_name" class="form-label fw-bold text-secondary" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
+              Enterprise Name
+            </label>
+            <div class="input-group input-group-lg">
+              <span class="input-group-text bg-light border-end-0" style="border-radius: 12px 0 0 12px; color: #64748b;">
+                <i class="bi bi-building"></i>
+              </span>
+              {{ form.enterprise_name }}
+            </div>
+            {% if form.enterprise_name.errors %}
+              <div class="text-danger mt-1 small">
+                {{ form.enterprise_name.errors.0 }}
+              </div>
+            {% endif %}
+            <div class="form-text text-muted mt-2" style="font-size: 0.8rem;">
+              This name will be displayed in the sidebar, title bars, and standard system reports.
+            </div>
+          </div>
+
+          <!-- Enterprise Logo Field -->
+          <div class="mb-4">
+            <label for="id_logo" class="form-label fw-bold text-secondary" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
+              Corporate Logo
+            </label>
+            <div class="p-4 border border-dashed rounded-3 bg-light text-center" style="border-style: dashed !important; border-width: 2px !important; border-color: #cbd5e1 !important; border-radius: 12px !important;">
+              <i class="bi bi-cloud-arrow-up fs-2 text-muted mb-2"></i>
+              <div class="mb-2">{{ form.logo }}</div>
+              <div class="text-muted small">JPG, JPEG, PNG, or WEBP (Max 5MB)</div>
+            </div>
+            {% if form.logo.errors %}
+              <div class="text-danger mt-1 small">
+                {{ form.logo.errors.0 }}
+              </div>
+            {% endif %}
+
+            {% if profile.logo %}
+              <div class="mt-3 p-3 bg-light rounded d-flex align-items-center justify-content-between" style="border-radius: 10px;">
+                <div class="d-flex align-items-center gap-2">
+                  <img src="{{ profile.logo.url }}" alt="Current Logo" class="img-thumbnail" style="max-height: 50px; max-width: 80px; object-fit: contain;">
+                  <span class="small text-muted">Current Logo Active</span>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="d-grid gap-2 mt-5">
+            <button type="submit" class="btn btn-primary btn-lg fw-bold border-0 shadow" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-radius: 12px; padding: 0.8rem 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease;">
+              Complete Setup &amp; Launch Dashboard
+            </button>
+            <form action="{% url 'logout' %}" method="post" class="w-100 mt-2">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-secondary w-100 fw-bold py-2 border-0" style="color: #64748b; font-size: 0.9rem;">
+                <i class="bi bi-box-arrow-right me-1"></i> Cancel &amp; Logout
+              </button>
+            </form>
+          </div>
+        </form>
+
+      {% else %}
+        <!-- Read-Only Setup Mode for Regular Employees -->
+        <div class="text-center py-4">
+          <div class="d-inline-flex align-items-center justify-content-center bg-light rounded-circle mb-4 animate-pulse" style="width: 90px; height: 90px; box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1);">
+            <i class="bi bi-hourglass-split fs-1 text-warning"></i>
+          </div>
+          <h3 class="fw-extrabold text-dark mb-3" style="font-family: 'Outfit', 'Inter', sans-serif; letter-spacing: -0.5px;">Setup in Progress</h3>
+          <p class="text-muted fs-6 mb-5">The system administrator is currently configuring the system onboarding settings. Please sign in again once onboarding has been finalized.</p>
+          
+          <form action="{% url 'logout' %}" method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-dark btn-lg w-100 fw-bold shadow-sm" style="border-radius: 12px; padding: 0.8rem 1.5rem; background-color: #0f172a;">
+              <i class="bi bi-box-arrow-left me-2"></i> Log Out
+            </button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&display=swap');
+  
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 20px -5px rgba(15,23,42,0.3) !important;
+  }
+  
+  .border-dashed {
+    border-style: dashed !important;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .7; transform: scale(0.96); }
+  }
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+</style>
+{% endblock %}

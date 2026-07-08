@@ -13,7 +13,7 @@ urlpatterns = [
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Admin site branding
-admin.site.site_header = 'CYSD ERP Administration'
-admin.site.site_title = 'CYSD ERP Admin'
+admin.site.site_header = 'Enterprise ERP Administration'
+admin.site.site_title = 'Enterprise ERP Admin'
 admin.site.index_title = 'Dashboard'
 admin.site.site_url = '/dashboard/'
