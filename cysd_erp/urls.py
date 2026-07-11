@@ -5,8 +5,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
 
+from tracker import views as tracker_views
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/login/', tracker_views.RateLimitedLoginView.as_view(), name='login'),
     path('accounts/', include('django.contrib.auth.urls')),
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
     path('dashboard/', include('tracker.urls')),

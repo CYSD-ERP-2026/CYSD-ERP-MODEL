@@ -23,6 +23,35 @@ from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, Emp
 CACHE_TTL_SECONDS = 300
 
 
+from django.contrib.auth.views import LoginView
+from django.utils.decorators import method_decorator
+from functools import wraps
+
+def ratelimit(key_prefix, limit, period):
+    """
+    Simple cache-based rate limiting decorator.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            # Client IP rate-limiting
+            ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '127.0.0.1'))
+            ip = ip.split(',')[0].strip()
+            cache_key = f"ratelimit:{key_prefix}:{ip}"
+            
+            requests = cache.get(cache_key, 0)
+            if requests >= limit:
+                return HttpResponse("Too Many Requests: Rate limit exceeded. Please try again later.", status=429)
+            
+            cache.set(cache_key, requests + 1, period)
+            return view_func(request, *args, **kwargs)
+        return _wrapped_view
+    return decorator
+
+
+@method_decorator(ratelimit(key_prefix='login', limit=5, period=60), name='dispatch')
+class RateLimitedLoginView(LoginView):
+    pass
 @login_required
 def dashboard_view(request):
     """Main analytics dashboard."""
@@ -455,6 +484,10 @@ def employee_performance_view(request):
 
 
 
+
+
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Dev Mode: Role Masquerade View
 # ─────────────────────────────────────────────────────────────────────────────
@@ -470,6 +503,7 @@ DEV_ROLE_MAP = {
 }
 
 
+@ratelimit(key_prefix='dev_switch', limit=10, period=60)
 def dev_role_switch_view(request, role_name):
     """
     DEV-ONLY masquerade endpoint.
@@ -520,201 +554,7 @@ def dev_role_switch_view(request, role_name):
         import random
         rand_suffix = random.randint(1000, 9999)
         Employee.objects.create(
-            user=user,
-            employee_id=f"DEV-{user.username.upper()}-{rand_suffix}"[:30],
-            name=user.username.title(),
-            email=user.email or f"{user.username}_{rand_suffix}@cysd.org",
-            role=role_name.lower(),
-            designation="Dev Masquerade Profile",
-            is_active=True,
-        )
-    else:
-        profile = user.employee_profile
-        if profile.role != role_name.lower():
-            profile.role = role_name.lower()
-            profile.save()
-
-    # Django's login() requires a backend attribute when called outside of
-    # the standard authenticate() flow – set it explicitly.
-    user.backend = 'django.contrib.auth.backends.ModelBackend'
-    login(request, user)
-
-    from django.contrib import messages
-    messages.success(
-        request,
-        f'[Dev] Switched to role "{role_name}" → logged in as '
-        f'<strong>{user.username}</strong>.'
-    )
-    return redirect('tracker:dashboard')
-
-
-@login_required
-def my_tasks_view(request):
-    """Personal dashboard view for employees to track their assigned tasks."""
-    profile = getattr(request.user, 'employee_profile', None)
-    if not profile:
-        from django.contrib import messages
-        messages.warning(request, "You do not have an Employee profile linked to your account.")
-        return redirect('tracker:dashboard')
-
-    # Get all tasks assigned to this employee
-    tasks = Task.objects.filter(assigned_to=profile).select_related('project').order_by('due_date')
-
-    # Calculate summary statistics
-    total_tasks = tasks.count()
-    emp_workloads = (
-        employees_base_qs
-        .annotate(active_tasks_count=Count('tasks', filter=Q(tasks__status__in=['pending', 'in_progress'])))
-        .filter(active_tasks_count__gt=0)
-        .order_by('-active_tasks_count')
-    )
-    
-    workload_labels = [emp.name for emp in emp_workloads]
-    workload_counts = [emp.active_tasks_count for emp in emp_workloads]
-    workload_json = json.dumps({
-        'labels': workload_labels,
-        'data': workload_counts
-    })
-
-    # 2. Efficiency Chart: Completed vs Overdue
-    completed_count = tasks_qs.filter(status='completed').count()
-    overdue_count = tasks_qs.filter(status='overdue').count()
-    
-    efficiency_percentage = 0.0
-    if completed_count + overdue_count > 0:
-        efficiency_percentage = (completed_count / (completed_count + overdue_count)) * 100
-
-    efficiency_json = json.dumps({
-        'labels': ['Completed', 'Overdue'],
-        'data': [completed_count, overdue_count]
-    })
-
-    # 3. Optimized Employee Registry Table Data (N+1 query resolution)
-    # Prefetch led_projects and tasks to process them in-memory
-    employees = (
-        employees_base_qs
-        .select_related('domain')
-        .prefetch_related('led_projects', 'tasks')
-        .order_by('name')
-    )
-    
-    employees_data = []
-    for emp in employees:
-        # Resolve metrics in memory to prevent N+1 hits
-        led_projects = list(emp.led_projects.all())
-        emp_tasks = list(emp.tasks.all())
-        
-        active_projects_led = sum(1 for p in led_projects if p.status == 'active')
-        active_tasks_count = sum(1 for t in emp_tasks if t.status in ['pending', 'in_progress'])
-        
-        # Deadlines in memory
-        deadlines = []
-        upcoming_tasks = [t for t in emp_tasks if t.status in ['pending', 'in_progress', 'overdue']]
-        if upcoming_tasks:
-            upcoming_tasks.sort(key=lambda x: x.due_date)
-            nearest_task = upcoming_tasks[0]
-            deadlines.append((nearest_task.due_date, f"Task: {nearest_task.title}"))
-            
-        upcoming_projects = [p for p in led_projects if p.status in ['planning', 'active']]
-        if upcoming_projects:
-            upcoming_projects.sort(key=lambda x: x.deadline)
-            nearest_project = upcoming_projects[0]
-            deadlines.append((nearest_project.deadline, f"Project: {nearest_project.title}"))
-            
-        if deadlines:
-            deadlines.sort(key=lambda x: x[0])
-            nearest_date, nearest_desc = deadlines[0]
-            deadline_display = f"{nearest_date.strftime('%d %b %Y')} ({nearest_desc})"
-        else:
-            deadline_display = "No upcoming deadlines"
-            
-        employees_data.append({
-            'employee': emp,
-            'active_projects_led': active_projects_led,
-            'active_tasks': active_tasks_count,
-            'upcoming_deadline': deadline_display,
-        })
-
-    context = {
-        'workload_json': workload_json,
-        'efficiency_json': efficiency_json,
-        'has_workload_data': len(workload_labels) > 0,
-        'has_efficiency_data': (completed_count + overdue_count) > 0,
-        'efficiency_percentage': round(efficiency_percentage, 1),
-        'employees_data': employees_data,
-        'generated_at': timezone.now(),
-    }
-    
-    cache.set(cache_key, context, CACHE_TTL_SECONDS)
-    return render(request, 'employee_analytics.html', context)
-
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Dev Mode: Role Masquerade View
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# Maps human-friendly role slugs to Django usernames.
-# Add / edit entries here to match the usernames in your local database.
-#
-DEV_ROLE_MAP = {
-    'founder':    'admin',      # typically the superuser / founder account
-    'hr':         'hr_user',    # a staff user with HR permissions
-    'supervisor': 'supervisor', # a staff user with supervisor permissions
-    'employee':   'employee',   # a regular non-staff user
-}
-
-
-def dev_role_switch_view(request, role_name):
-    """
-    DEV-ONLY masquerade endpoint.
-    Logs the current session in as a predefined test user for the given role,
-    allowing rapid RBAC testing without re-entering passwords.
-
-    Blocked in production: returns 403 when DEBUG=False.
-
-    Usage:
-        GET /dashboard/dev-switch/founder/    → log in as the 'admin' user
-        GET /dashboard/dev-switch/hr/         → log in as 'hr_user'
-        GET /dashboard/dev-switch/supervisor/ → log in as 'supervisor'
-        GET /dashboard/dev-switch/employee/   → log in as 'employee'
-
-    To add roles: extend DEV_ROLE_MAP above with 'slug': 'django_username'.
-    """
-    # Hard block in production – this view must never be reachable on live servers
-    if not settings.DEBUG:
-        return HttpResponseForbidden(
-            '<h1>403 Forbidden</h1>'
-            '<p>The Dev Role Switcher is disabled outside of DEBUG mode.</p>'
-        )
-
-    User = get_user_model()
-
-    username = DEV_ROLE_MAP.get(role_name.lower())
-    if not username:
-        from django.http import HttpResponseBadRequest
-        return HttpResponseBadRequest(
-            f'Unknown role "{role_name}". '
-            f'Available roles: {", ".join(DEV_ROLE_MAP.keys())}'
-        )
-
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        from django.contrib import messages
-        messages.warning(
-            request,
-            f'Dev switcher: no user with username "{username}" exists. '
-            f'Create it via manage.py createsuperuser or the admin panel.'
-        )
-        return redirect('tracker:dashboard')
-
-    # Dev Switcher Patch: Ensure the user has an Employee profile with the correct role
-    if not hasattr(user, 'employee_profile'):
-        from .models import Employee
-        import random
-        rand_suffix = random.randint(1000, 9999)
-        Employee.objects.create(
+            enterprise=request.tenant,
             user=user,
             employee_id=f"DEV-{user.username.upper()}-{rand_suffix}"[:30],
             name=user.username.title(),
