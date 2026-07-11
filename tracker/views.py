@@ -1,31 +1,38 @@
-import base64
 import csv
-import io
 import json
 
 import matplotlib
-matplotlib.use('Agg')  # Headless mode for matplotlib
-import matplotlib.pyplot as plt
-import pandas as pd
 
+matplotlib.use('Agg')  # Headless mode for matplotlib
+import pandas as pd
 from django.conf import settings
-from django.contrib.auth import login, get_user_model
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db import models
 from django.db.models import Count, Max, Q
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats, Enterprise
+from .models import (
+    Domain,
+    Employee,
+    EmployeeStats,
+    Meeting,
+    Project,
+    Task,
+    TaskChecklist,
+)
 
 CACHE_TTL_SECONDS = 300
 
 
+from functools import wraps
+
 from django.contrib.auth.views import LoginView
 from django.utils.decorators import method_decorator
-from functools import wraps
+
 
 def ratelimit(key_prefix, limit, period):
     """
@@ -38,11 +45,11 @@ def ratelimit(key_prefix, limit, period):
             ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '127.0.0.1'))
             ip = ip.split(',')[0].strip()
             cache_key = f"ratelimit:{key_prefix}:{ip}"
-            
+
             requests = cache.get(cache_key, 0)
             if requests >= limit:
                 return HttpResponse("Too Many Requests: Rate limit exceeded. Please try again later.", status=429)
-            
+
             cache.set(cache_key, requests + 1, period)
             return view_func(request, *args, **kwargs)
         return _wrapped_view
@@ -53,7 +60,7 @@ def ratelimit(key_prefix, limit, period):
 class RateLimitedLoginView(LoginView):
     pass
 @login_required
-def dashboard_view(request):
+def dashboard_view(request: HttpRequest) -> HttpResponse:
     """Main analytics dashboard."""
 
     # --- Summary counts ---
@@ -276,54 +283,54 @@ def meetings_list_view(request):
 
 
 @login_required
-def policy_analytics_view(request):
+def policy_analytics_view(request: HttpRequest) -> HttpResponse:
     """View to analyze policy intervention scales using Pandas and Chart.js with caching."""
     # Organization-wide analytics cached using aggregate meeting count and latest update token
     meetings_count = Meeting.objects.filter(enterprise=request.tenant).count()
     latest_meeting = Meeting.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_token = latest_meeting.isoformat() if latest_meeting else 'none'
     cache_key = f"policy_analytics:{request.tenant.subdomain}:{meetings_count}:{latest_token}"
-    
+
     context = cache.get(cache_key)
     if context is not None:
         return render(request, 'analytics.html', context)
-        
+
     # Query meetings (select_related for domain optimization)
     meetings_qs = Meeting.objects.filter(enterprise=request.tenant).select_related('domain').values(
         'intervention_scale', 'domain__name'
     )
-    
+
     # Load into a Pandas DataFrame
     df = pd.DataFrame(list(meetings_qs))
-    
+
     if df.empty:
         chart_data_json = "{}"
         crosstab_html = "<p class='text-muted'>No data available for analysis.</p>"
     else:
         # Fill missing values if any domain is None
         df['domain__name'] = df['domain__name'].fillna('Unassigned')
-        
+
         # Human-readable labels for intervention scales
         scale_labels = dict(Meeting._meta.get_field('intervention_scale').choices)
         df['intervention_scale_label'] = df['intervention_scale'].map(scale_labels).fillna(df['intervention_scale'])
-        
+
         # Generate crosstab: intervention_scale vs domain__name
         crosstab = pd.crosstab(df['intervention_scale_label'], df['domain__name'])
-        
+
         # Reindex to ensure correct choice ordering on the chart and table
         scale_choices = Meeting._meta.get_field('intervention_scale').choices
         scale_display_names = [choice[1] for choice in scale_choices]
         crosstab = crosstab.reindex(scale_display_names, fill_value=0)
-        
+
         # Render crosstab to HTML table with clean Bootstrap classes
         crosstab_html = crosstab.to_html(classes='table table-borderless table-hover table-sm align-middle mb-0')
-        
+
         # ── Premium palette for domains ──
         PREMIUM_PALETTE = [
             '#2563eb', '#0891b2', '#0d9488', '#7c3aed',
             '#db2777', '#ea580c', '#65a30d', '#ca8a04',
         ]
-        
+
         # Build datasets list for Chart.js
         chart_datasets = []
         for idx, col_name in enumerate(crosstab.columns):
@@ -333,25 +340,25 @@ def policy_analytics_view(request):
                 'backgroundColor': PREMIUM_PALETTE[idx % len(PREMIUM_PALETTE)],
                 'borderRadius': 4,
             })
-            
+
         chart_data = {
             'labels': scale_display_names,
             'datasets': chart_datasets
         }
         chart_data_json = json.dumps(chart_data)
-        
+
     context = {
         'chart_data_json': chart_data_json,
         'crosstab_html': crosstab_html,
         'generated_at': timezone.now(),
     }
-    
+
     cache.set(cache_key, context, CACHE_TTL_SECONDS)
     return render(request, 'analytics.html', context)
 
 
 @login_required
-def employee_performance_view(request):
+def employee_performance_view(request: HttpRequest) -> HttpResponse:
     """View to analyze employee workloads and task efficiency using Chart.js with caching and prefetch."""
     profile = getattr(request.user, 'employee_profile', None)
     role = 'founder' if request.user.is_superuser else 'employee'
@@ -365,17 +372,17 @@ def employee_performance_view(request):
     tasks_count = Task.objects.filter(enterprise=request.tenant).count()
     latest_task_update = Task.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_task_token = latest_task_update.isoformat() if latest_task_update else 'none'
-    
+
     projects_count = Project.objects.filter(enterprise=request.tenant).count()
     latest_proj_update = Project.objects.filter(enterprise=request.tenant).aggregate(latest=Max('updated_at'))['latest']
     latest_proj_token = latest_proj_update.isoformat() if latest_proj_update else 'none'
-    
+
     cache_key = (
         f"emp_perf:{request.tenant.subdomain}:{role}:{request.user.id}:"
         f"{tasks_count}:{latest_task_token}:"
         f"{projects_count}:{latest_proj_token}"
     )
-    
+
     context = cache.get(cache_key)
     if context is not None:
         return render(request, 'employee_analytics.html', context)
@@ -393,8 +400,8 @@ def employee_performance_view(request):
         employees_base_qs = Employee.objects.filter(enterprise=request.tenant, id__in=allowed_ids, is_active=True)
 
     # 1. Workload Chart: Active tasks per employee
-    from django.db.models import Count, Q
-    
+    from django.db.models import Count
+
     # Run aggregation for workload chart counts
     emp_workloads = (
         employees_base_qs
@@ -402,7 +409,7 @@ def employee_performance_view(request):
         .filter(active_tasks_count__gt=0)
         .order_by('-active_tasks_count')
     )
-    
+
     workload_labels = [emp.name for emp in emp_workloads]
     workload_counts = [emp.active_tasks_count for emp in emp_workloads]
     workload_json = json.dumps({
@@ -413,7 +420,7 @@ def employee_performance_view(request):
     # 2. Efficiency Chart: Completed vs Overdue
     completed_count = tasks_qs.filter(status='completed').count()
     overdue_count = tasks_qs.filter(status='overdue').count()
-    
+
     efficiency_percentage = 0.0
     if completed_count + overdue_count > 0:
         efficiency_percentage = (completed_count / (completed_count + overdue_count)) * 100
@@ -431,16 +438,16 @@ def employee_performance_view(request):
         .prefetch_related('led_projects', 'tasks')
         .order_by('name')
     )
-    
+
     employees_data = []
     for emp in employees:
         # Resolve metrics in memory to prevent N+1 hits
         led_projects = list(emp.led_projects.all())
         emp_tasks = list(emp.tasks.all())
-        
+
         active_projects_led = sum(1 for p in led_projects if p.status == 'active')
         active_tasks_count = sum(1 for t in emp_tasks if t.status in ['pending', 'in_progress'])
-        
+
         # Deadlines in memory
         deadlines = []
         upcoming_tasks = [t for t in emp_tasks if t.status in ['pending', 'in_progress', 'overdue']]
@@ -448,20 +455,20 @@ def employee_performance_view(request):
             upcoming_tasks.sort(key=lambda x: x.due_date)
             nearest_task = upcoming_tasks[0]
             deadlines.append((nearest_task.due_date, f"Task: {nearest_task.title}"))
-            
+
         upcoming_projects = [p for p in led_projects if p.status in ['planning', 'active']]
         if upcoming_projects:
             upcoming_projects.sort(key=lambda x: x.deadline)
             nearest_project = upcoming_projects[0]
             deadlines.append((nearest_project.deadline, f"Project: {nearest_project.title}"))
-            
+
         if deadlines:
             deadlines.sort(key=lambda x: x[0])
             nearest_date, nearest_desc = deadlines[0]
             deadline_display = f"{nearest_date.strftime('%d %b %Y')} ({nearest_desc})"
         else:
             deadline_display = "No upcoming deadlines"
-            
+
         employees_data.append({
             'employee': emp,
             'active_projects_led': active_projects_led,
@@ -478,7 +485,7 @@ def employee_performance_view(request):
         'employees_data': employees_data,
         'generated_at': timezone.now(),
     }
-    
+
     cache.set(cache_key, context, CACHE_TTL_SECONDS)
     return render(request, 'employee_analytics.html', context)
 
@@ -550,8 +557,9 @@ def dev_role_switch_view(request, role_name):
 
     # Dev Switcher Patch: Ensure the user has an Employee profile with the correct role
     if not hasattr(user, 'employee_profile'):
-        from .models import Employee
         import random
+
+        from .models import Employee
         rand_suffix = random.randint(1000, 9999)
         Employee.objects.create(
             enterprise=request.tenant,
@@ -601,7 +609,7 @@ def my_tasks_view(request):
     in_progress_tasks = tasks.filter(status='in_progress').count()
     completed_tasks = tasks.filter(status='completed').count()
     overdue_tasks = tasks.filter(status='overdue').count()
-    
+
     # Calculate total hours logged
     total_hours = sum(t.hours_logged for t in tasks)
 
@@ -617,12 +625,12 @@ def my_tasks_view(request):
     comb_pending = pending_tasks + in_progress_tasks + unchecked_checklists.count()
     comb_awaiting = awaiting_checklists.count()
     comb_overdue = overdue_tasks
-    
+
     pct = round((comb_completed / comb_total) * 100) if comb_total > 0 else 0
 
     # Combine standard tasks and checklist items into a single list
     unified_list = []
-    
+
     # Add standard tasks
     for t in tasks:
         unified_list.append({
@@ -637,7 +645,7 @@ def my_tasks_view(request):
             'hours_logged': f"{t.hours_logged} hrs",
             'creator': None,
         })
-        
+
     # Add checklist items
     status_map = {
         'PENDING': 'pending',
@@ -657,19 +665,19 @@ def my_tasks_view(request):
             'hours_logged': '—',
             'creator': item.created_by.name if item.created_by else 'System',
         })
-        
+
     # Sort unified list: active/pending items first, completed items at the bottom
     def sort_key(x):
         is_completed = 1 if x['status'] == 'completed' else 0
         date_val = x['date'] or timezone.now().date()
         return (is_completed, date_val)
-        
+
     unified_list.sort(key=sort_key)
 
     context = {
         'profile': profile,
         'unified_list': unified_list,
-        
+
         # Combined stats for dashboard counters and progress bar
         'total_tasks': comb_total,
         'completed_tasks': comb_completed,
@@ -694,8 +702,8 @@ def checklist_submit_view(request, item_id):
     Transitions: PENDING → AWAITING_VERIFICATION.
     Only the assigned employee can trigger this.
     """
-    from django.db import transaction
     from django.contrib import messages
+    from django.db import transaction
 
     profile = getattr(request.user, 'employee_profile', None)
     if not profile:
@@ -797,8 +805,8 @@ def checklist_resolve_view(request, item_id):
     Approve: AWAITING_VERIFICATION → COMPLETED  (triggers signal → EmployeeStats update)
     Reject:  AWAITING_VERIFICATION → PENDING    (clears timestamps, stores feedback)
     """
-    from django.db import transaction
     from django.contrib import messages
+    from django.db import transaction
 
     profile = getattr(request.user, 'employee_profile', None)
     role = 'founder' if request.user.is_superuser else getattr(profile, 'role', 'employee')
@@ -872,21 +880,22 @@ def setup_organization_view(request):
     Allows editing details of the current tenant (Enterprise).
     """
     from django.contrib import messages
+
     from .forms import EnterpriseForm
-    
+
     profile_role = getattr(request.user, 'employee_profile', None)
     is_authorized = request.user.is_superuser or (profile_role and profile_role.role in ('founder', 'hr'))
-    
+
     tenant = getattr(request, 'tenant', None)
     if not tenant:
         return redirect('tracker:dashboard')
-        
+
     if not is_authorized:
         return render(request, 'tracker/setup_organization.html', {
             'profile': tenant,
             'is_authorized': False,
         })
-    
+
     if request.method == 'POST':
         form = EnterpriseForm(request.POST, request.FILES, instance=tenant)
         if form.is_valid():
@@ -895,7 +904,7 @@ def setup_organization_view(request):
             return redirect('tracker:dashboard')
     else:
         form = EnterpriseForm(instance=tenant)
-        
+
     return render(request, 'tracker/setup_organization.html', {
         'form': form,
         'profile': tenant,

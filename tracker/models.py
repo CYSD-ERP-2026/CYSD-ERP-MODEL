@@ -10,10 +10,10 @@ Models:
 """
 from pathlib import Path
 
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import User
 
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024
 ALLOWED_DOCUMENT_EXTENSIONS = {'.pdf', '.doc', '.docx', '.txt', '.xls', '.xlsx', '.ppt', '.pptx'}
@@ -99,7 +99,7 @@ class Domain(models.Model):
         return f'{self.name} ({self.code})'
 
     @property
-    def active_employee_count(self):
+    def active_employee_count(self) -> int:
         return self.employees.filter(is_active=True).count()
 
 
@@ -243,7 +243,7 @@ class Employee(models.Model):
         return f'{self.name} – {self.designation} [{self.employee_id}]'
 
     @property
-    def is_currently_active(self):
+    def is_currently_active(self) -> bool:
         if not self.is_active:
             return False
         if self.date_left and self.date_left < timezone.now().date():
@@ -380,7 +380,7 @@ class Meeting(models.Model):
         return f'{self.title} | {self.date} [{self.get_status_display()}]'
 
     @property
-    def attendee_count(self):
+    def attendee_count(self) -> int:
         return self.attendees.count()
 
 
