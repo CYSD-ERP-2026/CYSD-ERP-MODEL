@@ -60,6 +60,15 @@ class MeetingFilter(django_filters.FilterSet):
         model = Meeting
         fields = ['title', 'domain', 'intervention_scale', 'status']
 
+    def __init__(self, *args, **kwargs):
+        request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        if request and hasattr(request, 'tenant'):
+            qs = Domain.objects.filter(enterprise=request.tenant, is_active=True).order_by('name')
+            self.filters['domain'].queryset = qs
+            if 'domain' in self.form.fields:
+                self.form.fields['domain'].queryset = qs
+
 
 class EmployeeFilter(django_filters.FilterSet):
     """
@@ -92,3 +101,12 @@ class EmployeeFilter(django_filters.FilterSet):
     class Meta:
         model = Employee
         fields = ['name', 'domain', 'designation']
+
+    def __init__(self, *args, **kwargs):
+        request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        if request and hasattr(request, 'tenant'):
+            qs = Domain.objects.filter(enterprise=request.tenant, is_active=True).order_by('name')
+            self.filters['domain'].queryset = qs
+            if 'domain' in self.form.fields:
+                self.form.fields['domain'].queryset = qs

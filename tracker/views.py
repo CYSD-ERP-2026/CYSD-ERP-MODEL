@@ -243,7 +243,7 @@ def employees_list_view(request):
         .select_related('domain')
         .order_by('name')
     )
-    employee_filter = EmployeeFilter(request.GET, queryset=qs)
+    employee_filter = EmployeeFilter(request.GET, queryset=qs, request=request)
     context = {
         'filter': employee_filter,
         'employees': employee_filter.qs,
@@ -263,7 +263,7 @@ def meetings_list_view(request):
         .prefetch_related('attendees')
         .order_by('-date', '-start_time')
     )
-    meeting_filter = MeetingFilter(request.GET, queryset=qs)
+    meeting_filter = MeetingFilter(request.GET, queryset=qs, request=request)
     meetings = list(meeting_filter.qs)
 
     # Mask sensitive details for HR role
@@ -715,7 +715,7 @@ def checklist_submit_view(request, item_id):
     try:
         with transaction.atomic():
             item = TaskChecklist.objects.select_for_update().get(
-                pk=item_id, assigned_to=profile
+                pk=item_id, assigned_to=profile, enterprise=request.tenant
             )
             if item.status != 'PENDING':
                 messages.warning(request, "Only PENDING items can be submitted for verification.")
@@ -729,8 +729,8 @@ def checklist_submit_view(request, item_id):
                 submitted_at=item.submitted_at,
             )
     except TaskChecklist.DoesNotExist:
-        messages.error(request, "Checklist item not found or not assigned to you.")
-        return redirect('tracker:checklist_employee')
+        from django.http import Http404
+        raise Http404("Checklist item not found or not assigned to you.")
 
     messages.success(request, f'"{item.title}" submitted for supervisor verification.')
     return redirect('tracker:checklist_employee')
@@ -826,7 +826,7 @@ def checklist_resolve_view(request, item_id):
 
     try:
         with transaction.atomic():
-            item = TaskChecklist.objects.select_for_update().get(pk=item_id)
+            item = TaskChecklist.objects.select_for_update().get(pk=item_id, enterprise=request.tenant)
 
             # Supervisors can only resolve items belonging to their own subordinates
             if role == 'supervisor' and item.assigned_to.supervisor_id != profile.pk:
@@ -867,8 +867,8 @@ def checklist_resolve_view(request, item_id):
                     f'🔁 "{item.title}" returned to {item.assigned_to.name} for revision.'
                 )
     except TaskChecklist.DoesNotExist:
-        messages.error(request, "Checklist item not found.")
-        return redirect('tracker:checklist_supervisor')
+        from django.http import Http404
+        raise Http404("Checklist item not found.")
 
     return redirect('tracker:checklist_supervisor')
 
