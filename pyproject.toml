@@ -1,0 +1,18 @@
+[tool.ruff]
+target-version = "py310"
+
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "migrations",
+    "staticfiles",
+    "static",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E402",  # Module level import not at top of file (needed for django.setup() scripts)
+    "E501",  # Line too long
+]

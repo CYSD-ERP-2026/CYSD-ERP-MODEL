@@ -13,12 +13,21 @@ and review from the Django admin is quick and ergonomic.
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import User
-from unfold.admin import ModelAdmin, TabularInline
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from unfold.admin import ModelAdmin, TabularInline
 
-from .models import Domain, Employee, Meeting, Project, Task, TaskChecklist, EmployeeStats, Enterprise
-
+from .models import (
+    Domain,
+    Employee,
+    EmployeeStats,
+    Enterprise,
+    Meeting,
+    Project,
+    Task,
+    TaskChecklist,
+)
 
 # ===========================================================================
 # Enterprise Admin
