@@ -235,3 +235,189 @@ class MultiTenantDataIsolationTests(TestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn("You do not have permission to access the workspace for 'Tenant B'.", str(messages[0]))
 
+
+class RoleBasedPermissionTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from django.core.cache import cache
+
+        from tracker.models import Domain, Employee, Enterprise
+        cache.clear()
+
+        # Create Enterprise
+        self.tenant = Enterprise.objects.create(name="Enterprise A", subdomain="cysd-role")
+
+        # Create Domain
+        self.domain = Domain.objects.create(name="Domain A", code="DA", enterprise=self.tenant)
+
+        # Create Users & Employees
+        # Supervisor
+        self.super_user = User.objects.create_user(username="supervisor_u", password="password123", is_staff=True)
+        self.supervisor = Employee.objects.create(
+            user=self.super_user,
+            name="Supervisor",
+            employee_id="EMP-SUP",
+            email="sup@cysd.com",
+            role="supervisor",
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+        # Subordinate (Direct Report)
+        self.sub_user = User.objects.create_user(username="sub_u", password="password123")
+        self.subordinate = Employee.objects.create(
+            user=self.sub_user,
+            name="Subordinate",
+            employee_id="EMP-SUB",
+            email="sub@cysd.com",
+            role="employee",
+            supervisor=self.supervisor,
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+        # Non-subordinate
+        self.other_user = User.objects.create_user(username="other_u", password="password123")
+        self.non_subordinate = Employee.objects.create(
+            user=self.other_user,
+            name="Non Subordinate",
+            employee_id="EMP-OTHER",
+            email="other@cysd.com",
+            role="employee",
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+        # Founder
+        self.founder_user = User.objects.create_user(username="founder_u", password="password123")
+        self.founder = Employee.objects.create(
+            user=self.founder_user,
+            name="Founder",
+            employee_id="EMP-FND",
+            email="fnd@cysd.com",
+            role="founder",
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+        # HR
+        self.hr_user = User.objects.create_user(username="hr_u", password="password123")
+        self.hr = Employee.objects.create(
+            user=self.hr_user,
+            name="HR",
+            employee_id="EMP-HR",
+            email="hr@cysd.com",
+            role="hr",
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+        # Regular Employee
+        self.emp_user = User.objects.create_user(username="emp_u", password="password123")
+        self.employee = Employee.objects.create(
+            user=self.emp_user,
+            name="Employee",
+            employee_id="EMP-REG",
+            email="reg@cysd.com",
+            role="employee",
+            enterprise=self.tenant,
+            domain=self.domain,
+        )
+
+    def test_supervisor_can_assign_to_direct_report(self):
+        from tracker.models import TaskChecklist
+        item = TaskChecklist(
+            title="Direct Report Task",
+            enterprise=self.tenant,
+            assigned_to=self.subordinate,
+            created_by=self.supervisor,
+        )
+        item.save()
+        self.assertIsNotNone(item.pk)
+
+    def test_supervisor_cannot_assign_to_non_subordinate(self):
+        from django.core.exceptions import ValidationError
+
+        from tracker.models import TaskChecklist
+
+        item = TaskChecklist(
+            title="Non-Subordinate Task",
+            enterprise=self.tenant,
+            assigned_to=self.non_subordinate,
+            created_by=self.supervisor,
+        )
+        with self.assertRaises(ValidationError):
+            item.save()
+
+        # Test hitting the Django Admin creation view
+        self.super_user.is_superuser = True
+        self.super_user.save()
+        self.client.login(username="supervisor_u", password="password123")
+
+        response = self.client.post(
+            '/admin/tracker/taskchecklist/add/',
+            {
+                'title': 'Admin Task',
+                'assigned_to': self.non_subordinate.pk,
+                'created_by': self.supervisor.pk,
+                'status': 'PENDING',
+            },
+            HTTP_HOST='cysd-role.localhost'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("does not report to them", response.content.decode('utf-8'))
+
+    def test_founder_and_hr_can_assign_to_anyone(self):
+        from tracker.models import TaskChecklist
+
+        item1 = TaskChecklist(
+            title="Founder Task",
+            enterprise=self.tenant,
+            assigned_to=self.non_subordinate,
+            created_by=self.founder,
+        )
+        item1.save()
+        self.assertIsNotNone(item1.pk)
+
+        item2 = TaskChecklist(
+            title="HR Task",
+            enterprise=self.tenant,
+            assigned_to=self.non_subordinate,
+            created_by=self.hr,
+        )
+        item2.save()
+        self.assertIsNotNone(item2.pk)
+
+    def test_employee_intern_volunteer_cannot_access_verification_center(self):
+        self.client.login(username="emp_u", password="password123")
+        response = self.client.get('/dashboard/checklist/verify/', HTTP_HOST='cysd-role.localhost')
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    })
+    def test_hr_masked_meeting_visibility_on_dashboard(self):
+        from tracker.models import Meeting
+        Meeting.objects.create(
+            title="Confidential Meeting",
+            date="2026-07-11",
+            start_time="10:00",
+            end_time="11:00",
+            enterprise=self.tenant,
+            domain=self.domain,
+            agenda="Super secret details",
+            minutes="Secret minutes",
+            action_points="Secret actions",
+        )
+        self.client.login(username="hr_u", password="password123")
+
+        response = self.client.get('/dashboard/', HTTP_HOST='cysd-role.localhost')
+        self.assertEqual(response.status_code, 200)
+
+        recent_meetings = response.context['recent_meetings']
+        self.assertEqual(len(recent_meetings), 1)
+        self.assertEqual(recent_meetings[0].agenda, 'Confidential - Access Restricted')
+        self.assertEqual(recent_meetings[0].minutes, 'Confidential - Access Restricted')
+        self.assertEqual(recent_meetings[0].action_points, 'Confidential - Access Restricted')
+
