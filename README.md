@@ -87,9 +87,10 @@ The database comprises **9 core models**:
 | Dependency | Version | Purpose |
 | :--- | :--- | :--- |
 | **Django** | `4.2.30` | Core Web Framework (Long-Term Support) |
-| **psycopg2-binary** | `2.9.9` | PostgreSQL database adapter |
+| **django-unfold** | `0.28.0` | Modern Django admin theme |
+| **psycopg2-binary** | `2.9.12` | PostgreSQL database adapter |
 | **python-decouple** | `3.8` | Configuration settings parser |
-| **Pillow** | `12.1.1` | Image validation and photo storage |
+| **Pillow** | `12.2.0` | Image validation and photo storage |
 | **django-crispy-forms** | `2.1` | Bootstrap form rendering |
 | **crispy-bootstrap5** | `0.7` | Bootstrap 5 layout integration |
 | **whitenoise** | `6.6.0` | Production static files server |
@@ -97,7 +98,7 @@ The database comprises **9 core models**:
 | **pandas** | `3.0.3` | Analytics dataframes & aggregation |
 | **matplotlib** | `3.11.0` | Headless chart generation |
 | **django-environ** | `0.13.0` | Twelve-factor configuration helper |
-| **gunicorn** | `21.2.0` | WSGI Production Web server |
+| **gunicorn** | `22.0.0` | WSGI Production Web server |
 | **argon2-cffi** | `25.1.0` | High-security password hashing |
 
 ---
