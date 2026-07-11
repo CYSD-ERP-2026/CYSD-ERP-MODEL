@@ -74,3 +74,12 @@ class DevSwitchTests(TestCase):
         response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
         self.assertEqual(response.status_code, 429)
 
+    def test_startup_check_logs_warning_on_wildcard_hosts(self):
+        from django.apps import apps
+        config = apps.get_app_config('tracker')
+        
+        with self.settings(DEBUG=False, ALLOWED_HOSTS=['*']):
+            with self.assertLogs('tracker.apps', level='WARNING') as cm:
+                config.ready()
+            self.assertTrue(any("ALLOWED_HOSTS contains '*'" in log for log in cm.output))
+
