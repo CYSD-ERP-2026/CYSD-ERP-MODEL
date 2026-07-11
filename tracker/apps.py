@@ -8,10 +8,11 @@ class TrackerConfig(AppConfig):
     def ready(self):
         # Import signals so the @receiver decorators are registered with Django.
         # This must be done inside ready() to avoid circular imports at startup.
-        import tracker.signals  # noqa: F401
-
         import logging
+
         from django.conf import settings
+
+        import tracker.signals  # noqa: F401
 
         logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class TrackerConfig(AppConfig):
                     "SECURITY WARNING: ALLOWED_HOSTS contains '*' or is empty in production (DEBUG=False)! "
                     "This makes the application vulnerable to Host Header Injection attacks."
                 )
-            
+
             # Check CSRF_TRUSTED_ORIGINS
             csrf_trusted_origins = getattr(settings, 'CSRF_TRUSTED_ORIGINS', [])
             for origin in csrf_trusted_origins:

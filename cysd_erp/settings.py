@@ -4,6 +4,7 @@ Django settings for cysd_erp project.
 CYSD ERP Dashboard - NGO Enterprise Resource Planning System
 """
 from pathlib import Path
+
 import environ
 from django.core.exceptions import ImproperlyConfigured
 

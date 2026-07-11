@@ -8,7 +8,13 @@ they integrate seamlessly with the existing Bootstrap 5 templates.
 import django_filters
 from django.forms import Select, TextInput
 
-from .models import Domain, Employee, Meeting, INTERVENTION_SCALE_CHOICES, MEETING_STATUS_CHOICES
+from .models import (
+    INTERVENTION_SCALE_CHOICES,
+    MEETING_STATUS_CHOICES,
+    Domain,
+    Employee,
+    Meeting,
+)
 
 # Reusable widget kwargs
 _TEXT_WIDGET = TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': ''})

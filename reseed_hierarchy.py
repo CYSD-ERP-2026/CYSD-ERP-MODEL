@@ -1,26 +1,28 @@
 import os
-import sys
+
 import django
 
 # Set up Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cysd_erp.settings')
 django.setup()
 
-from django.contrib.auth.models import User
-from tracker.models import Domain, Employee, Project, Task, Meeting
-from django.utils import timezone
 import datetime
 from decimal import Decimal
 
+from django.contrib.auth.models import User
+
+from tracker.models import Domain, Employee, Meeting, Project, Task
+
+
 def reseed():
     print("Starting clean hierarchy re-seeding...")
-    
+
     # 1. Clear existing database objects (except admin user and its profile)
     Task.objects.all().delete()
     Project.objects.all().delete()
     Meeting.objects.all().delete()
     Domain.objects.all().delete()
-    
+
     # Delete all employees except the one linked to 'admin'
     admin_user = User.objects.get(username='admin')
     admin_profile = Employee.objects.filter(user=admin_user).first()
@@ -38,18 +40,18 @@ def reseed():
             is_active=True,
             designation="Founder & Executive Director"
         )
-    
+
     # Delete all users except 'admin'
     User.objects.exclude(username='admin').delete()
-    
+
     # Create the requested domains
     domain_srl = Domain.objects.create(name="Sustainable Rural Livelihoods", code="SRL", lead="Admin Founder")
     domain_ied = Domain.objects.create(name="Inclusive Education", code="IED", lead="Sujata Patnaik")
     domain_wem = Domain.objects.create(name="Women Empowerment & SHGs", code="WEM", lead="Harish Rao")
     domain_hln = Domain.objects.create(name="Health & Nutrition", code="HLN", lead="Siddharth Mohanty")
-        
+
     print("Database cleared. Creating new hierarchy...")
-    
+
     # 2. Create users and linked employees
     # Passwords for all users is set to 'admin123' for ease of testing
     def create_user_and_employee(username, name, role, supervisor, designation, email, domain):
@@ -62,7 +64,7 @@ def reseed():
         if role in ['founder', 'hr', 'supervisor']:
             user.is_staff = True
         user.save()
-        
+
         emp = Employee.objects.create(
             user=user,
             employee_id=f"CYSD-{role.upper()}-{username.upper()}"[:30],
@@ -90,7 +92,7 @@ def reseed():
         email='hr@cysd.org',
         domain=domain_wem
     )
-    
+
     # Create Supervisor 1 (reports to founder)
     sup1_emp = create_user_and_employee(
         username='supervisor',
@@ -112,7 +114,7 @@ def reseed():
         email='sujata@cysd.org',
         domain=domain_ied
     )
-    
+
     # Create Employees under Supervisor 1
     emp1_emp = create_user_and_employee(
         username='employee',
@@ -133,7 +135,7 @@ def reseed():
         email='bikram@cysd.org',
         domain=domain_wem
     )
-    
+
     # Create Intern under Supervisor 1
     intern_emp = create_user_and_employee(
         username='intern_a',
@@ -144,7 +146,7 @@ def reseed():
         email='ipsita@cysd.org',
         domain=domain_srl
     )
-    
+
     # Create Volunteer under Supervisor 2
     volunteer_emp = create_user_and_employee(
         username='volunteer_a',
@@ -157,7 +159,7 @@ def reseed():
     )
 
     print("Hierarchy created. Seeding projects, tasks, and meetings...")
-    
+
     # 3. Create Projects
     proj1 = Project.objects.create(
         title="Village Micro-enterprise Scale-up",
@@ -215,7 +217,7 @@ def reseed():
         status="completed",
         hours_logged=Decimal("18.00")
     )
-    
+
     # Bikram's tasks
     create_task(
         title="Design data validation script",
@@ -233,7 +235,7 @@ def reseed():
         status="completed",
         hours_logged=Decimal("25.00")
     )
-    
+
     # Ipsita's (Intern) tasks
     create_task(
         title="Draft qualitative case study reports",

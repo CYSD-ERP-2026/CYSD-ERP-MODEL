@@ -4,7 +4,7 @@ def organization_context(request):
     globally into templates.
     """
     tenant = getattr(request, 'tenant', None)
-    
+
     logo_url = None
     if tenant and tenant.logo:
         try:

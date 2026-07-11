@@ -29,11 +29,13 @@ class SecurityValidationTests(TestCase):
 
 from django.test import override_settings
 
+
 @override_settings(DEBUG=True)
 class DevSwitchTests(TestCase):
     def setUp(self):
-        from tracker.models import Enterprise
         from django.contrib.auth.models import User
+
+        from tracker.models import Enterprise
         # Get or create an Enterprise
         self.enterprise, _ = Enterprise.objects.get_or_create(
             subdomain="cysd",
@@ -52,10 +54,10 @@ class DevSwitchTests(TestCase):
         client = self.client
         # Set HTTP_HOST to cysd.localhost so middleware detects the subdomain
         response = client.get('/dashboard/dev-switch/founder/', HTTP_HOST='cysd.localhost')
-        
+
         # Verify redirect to dashboard
         self.assertEqual(response.status_code, 302)
-        
+
         # Verify Employee profile was created with the correct tenant
         employee = Employee.objects.get(user=self.user)
         self.assertEqual(employee.enterprise, self.enterprise)
@@ -64,12 +66,12 @@ class DevSwitchTests(TestCase):
     def test_login_rate_limiting(self):
         from django.core.cache import cache
         cache.clear()
-        
+
         # The login view is rate limited to 5 requests per 60 seconds
         for _ in range(5):
             response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
             self.assertEqual(response.status_code, 200)
-        
+
         # 6th request should return 429
         response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
         self.assertEqual(response.status_code, 429)
@@ -77,7 +79,7 @@ class DevSwitchTests(TestCase):
     def test_startup_check_logs_warning_on_wildcard_hosts(self):
         from django.apps import apps
         config = apps.get_app_config('tracker')
-        
+
         with self.settings(DEBUG=False, ALLOWED_HOSTS=['*']):
             with self.assertLogs('tracker.apps', level='WARNING') as cm:
                 config.ready()

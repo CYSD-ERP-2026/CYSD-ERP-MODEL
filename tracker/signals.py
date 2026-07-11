@@ -6,11 +6,11 @@ Automatic analytics synchronization for the TaskChecklist verification workflow.
 This module hooks into the `post_save` signal of `TaskChecklist` and triggers
 real-time stat recalculation only when a task transitions cleanly into COMPLETED.
 """
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.db import transaction
 
-from .models import TaskChecklist, EmployeeStats
+from .models import EmployeeStats, TaskChecklist
 
 
 @receiver(post_save, sender=TaskChecklist)

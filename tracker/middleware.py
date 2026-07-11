@@ -1,5 +1,7 @@
 from django.http import Http404
+
 from .models import Enterprise
+
 
 class TenantMiddleware:
     """
@@ -13,7 +15,7 @@ class TenantMiddleware:
         # Get the hostname without port
         host = request.get_host().split(':')[0].lower()
         parts = host.split('.')
-        
+
         # Determine subdomain:
         # e.g., 'cysd.localhost' -> parts = ['cysd', 'localhost']
         # e.g., 'cysd.myapp.com' -> parts = ['cysd', 'myapp', 'com']
@@ -32,7 +34,7 @@ class TenantMiddleware:
                 request.tenant = enterprise
             except Enterprise.DoesNotExist:
                 raise Http404(f"No enterprise registered under subdomain '{subdomain}'.")
-        
+
         # If accessing the app shell without a tenant (and not accessing global django admin or static files)
         # we can either default to a default tenant or require subdomain
         path = request.path
@@ -41,16 +43,16 @@ class TenantMiddleware:
             path.startswith('/static/') or
             path.startswith('/media/')
         )
-        
+
         if not request.tenant and not is_exempt:
             raise Http404("No tenant workspace specified. Please access the application via your subdomain.")
-        
+
         # Check tenant boundaries for authenticated users
         if request.user.is_authenticated and request.tenant:
             profile = getattr(request.user, 'employee_profile', None)
             if profile and profile.enterprise != request.tenant and not request.user.is_superuser:
-                from django.contrib.auth import logout
                 from django.contrib import messages
+                from django.contrib.auth import logout
                 from django.shortcuts import redirect
                 logout(request)
                 messages.error(request, f"You do not have permission to access the workspace for '{request.tenant.name}'.")

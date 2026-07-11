@@ -12,19 +12,23 @@ Creates (idempotent – skips each section if data already exists):
   • 90 Tasks
 """
 
-import os
-import sys
-import random
 import datetime
+import os
+import random
 from decimal import Decimal
 
 # ── Bootstrap Django ─────────────────────────────────────────────────────────
 import django
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cysd_erp.settings')
 django.setup()
 
 from tracker.models import (
-    Domain, Employee, Meeting, Project, Task,
+    Domain,
+    Employee,
+    Meeting,
+    Project,
+    Task,
 )
 
 # ── Reproducible randomness ───────────────────────────────────────────────────
