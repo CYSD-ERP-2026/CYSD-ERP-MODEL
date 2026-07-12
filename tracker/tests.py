@@ -363,6 +363,7 @@ class RoleBasedPermissionTests(TestCase):
     })
     def test_supervisor_cannot_assign_to_non_subordinate(self):
         from django.core.exceptions import ValidationError
+
         from tracker.models import TaskChecklist
 
         item = TaskChecklist(
@@ -461,6 +462,7 @@ class RoleBasedPermissionTests(TestCase):
     })
     def test_employee_intern_volunteer_cannot_create_checklist_items(self):
         from django.contrib.auth.models import User
+
         from tracker.models import Employee
 
         # Create Intern and Volunteer users & profiles
@@ -508,7 +510,7 @@ class RoleBasedPermissionTests(TestCase):
         # Verify they are also forbidden from the verification and resolve views
         for user in [self.emp_user, intern_user, volunteer_user]:
             self.client.login(username=user.username, password="password123")
-            
+
             # Verification center view
             response = self.client.get('/dashboard/checklist/verify/', HTTP_HOST='cysd-role.localhost')
             self.assertEqual(response.status_code, 403)
@@ -527,7 +529,7 @@ class RoleBasedPermissionTests(TestCase):
     })
     def test_hr_masked_meeting_visibility(self):
         from tracker.models import Meeting
-        meeting = Meeting.objects.create(
+        Meeting.objects.create(
             title="Confidential Meeting",
             date="2026-07-11",
             start_time="10:00",
@@ -562,7 +564,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # Test Founder user - should NOT be masked
         self.client.login(username="founder_u", password="password123")
-        
+
         # Dashboard View
         response = self.client.get('/dashboard/', HTTP_HOST='cysd-role.localhost')
         self.assertEqual(response.status_code, 200)
@@ -585,6 +587,7 @@ class RoleBasedPermissionTests(TestCase):
     })
     def test_supervisor_cannot_resolve_non_subordinate_item_same_tenant(self):
         from django.contrib.auth.models import User
+
         from tracker.models import Employee, TaskChecklist
 
         # Create another supervisor in the same tenant
@@ -621,6 +624,9 @@ class RoleBasedPermissionTests(TestCase):
         # Should return 403 Forbidden
         self.assertEqual(response.status_code, 403)
 
+        # Confirm supervisor_b's own workload/checklist queryset is unaffected
+        self.assertEqual(TaskChecklist.objects.filter(assigned_to__supervisor=supervisor_b).count(), 0)
+
         # Verify that the checklist item status has NOT changed to COMPLETED
         checklist_item.refresh_from_db()
         self.assertEqual(checklist_item.status, 'AWAITING_VERIFICATION')
@@ -634,6 +640,7 @@ class TaskChecklistLifecycleTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import User
         from django.core.cache import cache
+
         from tracker.models import Domain, Employee, Enterprise
 
         cache.clear()
@@ -735,6 +742,7 @@ class TaskChecklistLifecycleTests(TestCase):
 
     def test_checklist_resolve_reject_lifecycle(self):
         from django.utils import timezone
+
         from tracker.models import TaskChecklist
         item = TaskChecklist.objects.create(
             title="Reject Task",
@@ -763,7 +771,7 @@ class TaskChecklistLifecycleTests(TestCase):
 
     def test_employeestats_recalculation_signal(self):
         from tracker.models import EmployeeStats, TaskChecklist
-        
+
         # 1 PENDING, 1 AWAITING_VERIFICATION
         item_pending = TaskChecklist.objects.create(
             title="Task 1",
@@ -772,6 +780,7 @@ class TaskChecklistLifecycleTests(TestCase):
             created_by=self.supervisor,
             status='PENDING',
         )
+        self.assertEqual(item_pending.status, 'PENDING')
         item_awaiting = TaskChecklist.objects.create(
             title="Task 2",
             enterprise=self.tenant,
@@ -779,7 +788,7 @@ class TaskChecklistLifecycleTests(TestCase):
             created_by=self.supervisor,
             status='AWAITING_VERIFICATION',
         )
-        
+
         # Recalculate stats initially
         stats = EmployeeStats.recalculate_for(self.subordinate)
         self.assertEqual(stats.total_assigned, 2)
@@ -802,6 +811,7 @@ class TaskChecklistLifecycleTests(TestCase):
 
     def test_no_unnecessary_employeestats_recalculation(self):
         from unittest.mock import patch
+
         from tracker.models import EmployeeStats, TaskChecklist
 
         item = TaskChecklist.objects.create(
