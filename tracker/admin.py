@@ -55,7 +55,7 @@ class TenantBaseAdmin(ModelAdmin):
         return qs
 
     def save_model(self, request, obj, form, change):
-        if getattr(request, 'tenant', None) and hasattr(obj, 'enterprise'):
+        if getattr(request, 'tenant', None) and hasattr(obj.__class__, 'enterprise'):
             obj.enterprise = request.tenant
         super().save_model(request, obj, form, change)
 
