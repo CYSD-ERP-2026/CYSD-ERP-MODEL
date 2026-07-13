@@ -225,7 +225,14 @@ class MultiTenantDataIsolationTests(TestCase):
     def test_admin_list_views_fallback_to_owner_tenant_on_bare_domain(self):
         from django.contrib.auth.models import Permission, User
 
-        from tracker.models import Domain, Employee, Meeting, Project, Task, TaskChecklist
+        from tracker.models import (
+            Domain,
+            Employee,
+            Meeting,
+            Project,
+            Task,
+            TaskChecklist,
+        )
 
         founder_user = User.objects.create_user(
             username='founder_admin_a',
@@ -270,6 +277,7 @@ class MultiTenantDataIsolationTests(TestCase):
             created_by=self.employee_a,
             status='PENDING',
         )
+        self.assertEqual(checklist_a.enterprise, self.tenant_a)
 
         # Create complete set of objects for Tenant B
         project_b = Project.objects.create(
@@ -296,6 +304,7 @@ class MultiTenantDataIsolationTests(TestCase):
             created_by=self.employee_b,
             status='PENDING',
         )
+        self.assertEqual(checklist_b.enterprise, self.tenant_b)
 
         request_factory = RequestFactory()
         admin_models = [
@@ -353,7 +362,14 @@ class MultiTenantDataIsolationTests(TestCase):
     def test_admin_list_view_for_user_without_employee_profile_is_empty(self):
         from django.contrib.auth.models import Permission, User
 
-        from tracker.models import Domain, Employee, Meeting, Project, Task, TaskChecklist
+        from tracker.models import (
+            Domain,
+            Employee,
+            Meeting,
+            Project,
+            Task,
+            TaskChecklist,
+        )
 
         user_without_profile = User.objects.create_user(
             username='staff_no_profile',
