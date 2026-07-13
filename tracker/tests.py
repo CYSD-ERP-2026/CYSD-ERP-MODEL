@@ -441,6 +441,38 @@ class MultiTenantDataIsolationTests(TestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn("You do not have permission to access the workspace for 'Tenant B'.", str(messages[0]))
 
+    def test_nonexistent_subdomain_shows_branded_error_page(self):
+        # 1. With DEBUG = True
+        with self.settings(DEBUG=True):
+            response = self.client.get('/dashboard/', HTTP_HOST='nonexistent.localhost')
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("Workspace Not Found", response.content.decode('utf-8'))
+            self.assertIn("Developer Note", response.content.decode('utf-8'))
+            self.assertIn("a", response.content.decode('utf-8'))
+            self.assertIn("b", response.content.decode('utf-8'))
+
+        # 2. With DEBUG = False
+        with self.settings(DEBUG=False):
+            response = self.client.get('/dashboard/', HTTP_HOST='nonexistent.localhost')
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("Workspace Not Found", response.content.decode('utf-8'))
+            self.assertNotIn("Developer Note", response.content.decode('utf-8'))
+
+    def test_no_workspace_specified_shows_branded_error_page(self):
+        # 1. With DEBUG = True
+        with self.settings(DEBUG=True):
+            response = self.client.get('/dashboard/', HTTP_HOST='localhost')
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("No Workspace Specified", response.content.decode('utf-8'))
+            self.assertIn("Developer Note", response.content.decode('utf-8'))
+
+        # 2. With DEBUG = False
+        with self.settings(DEBUG=False):
+            response = self.client.get('/dashboard/', HTTP_HOST='localhost')
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("No Workspace Specified", response.content.decode('utf-8'))
+            self.assertNotIn("Developer Note", response.content.decode('utf-8'))
+
 
 class RoleBasedPermissionTests(TestCase):
     def setUp(self):

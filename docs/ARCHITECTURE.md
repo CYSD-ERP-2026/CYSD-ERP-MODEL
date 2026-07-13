@@ -9,7 +9,8 @@ This document provides a comprehensive overview of the design patterns, security
 The system is built as a multi-tenant Software as a Service (SaaS) application using a **subdomain-based tenant isolation model**.
 
 ### Flow of Tenant Resolution
-```
+
+```text
 Request to [tenant].localhost:8000
        │
        ▼
@@ -60,7 +61,7 @@ Access permissions are enforced dynamically based on the employee's role within 
 
 The verification workflow for custom task checklists implements a robust 3-phase transition lifecycle to enforce accountability.
 
-```
+```text
        [Supervisor Assigns Checklist]
                      │
                      ▼

@@ -1,4 +1,3 @@
-from django.http import Http404
 
 from .models import Enterprise
 
@@ -38,7 +37,12 @@ class TenantMiddleware:
                 enterprise = Enterprise.objects.get(subdomain=subdomain)
                 request.tenant = enterprise
             except Enterprise.DoesNotExist:
-                raise Http404(f"No enterprise registered under subdomain '{subdomain}'.")
+                from django.conf import settings
+                from django.shortcuts import render
+                context = {'debug': settings.DEBUG}
+                if settings.DEBUG:
+                    context['registered_subdomains'] = list(Enterprise.objects.values_list('subdomain', flat=True))
+                return render(request, 'errors/tenant_not_found.html', context, status=404)
 
         # If accessing the app shell without a tenant (and not accessing global django admin or static files)
         # we can either default to a default tenant or require subdomain
@@ -50,7 +54,12 @@ class TenantMiddleware:
         )
 
         if not request.tenant and not is_exempt:
-            raise Http404("No tenant workspace specified. Please access the application via your subdomain.")
+            from django.conf import settings
+            from django.shortcuts import render
+            context = {'debug': settings.DEBUG}
+            if settings.DEBUG:
+                context['registered_subdomains'] = list(Enterprise.objects.values_list('subdomain', flat=True))
+            return render(request, 'errors/no_workspace.html', context, status=404)
 
         # Check tenant boundaries for authenticated users
         if request.user.is_authenticated and request.tenant:

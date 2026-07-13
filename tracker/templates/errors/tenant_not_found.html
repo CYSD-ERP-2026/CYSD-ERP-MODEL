@@ -1,0 +1,155 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace Not Found</title>
+
+  <!-- Google Fonts - Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Bootstrap 5.3 -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
+  />
+  <!-- Bootstrap Icons -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    rel="stylesheet"
+  />
+
+  <style>
+    :root {
+      --cysd-navy: #0f172a;
+      --cysd-slate: #64748b;
+      --cysd-primary: #2563eb;
+    }
+
+    body {
+      background: radial-gradient(circle at top left, rgba(37, 99, 235, .08), transparent 32rem),
+                  linear-gradient(180deg, #ffffff 0%, #f8fafc 38%, #eef2f7 100%);
+      color: var(--cysd-navy);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .error-card {
+      border: none;
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 8px 24px rgba(15, 23, 42, .06);
+      background: #ffffff;
+      max-width: 520px;
+      width: 100%;
+      padding: 2.5rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .error-icon {
+      width: 56px;
+      height: 56px;
+      background: #fef2f2;
+      color: #ef4444;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .error-title {
+      font-weight: 700;
+      color: var(--cysd-navy);
+      margin-bottom: 0.75rem;
+    }
+
+    .error-description {
+      color: var(--cysd-slate);
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .cause-list {
+      background-color: #f8fafc;
+      border-radius: 10px;
+      padding: 1.25rem 1.25rem 1.25rem 2rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: var(--cysd-slate);
+    }
+
+    .cause-list li {
+      margin-bottom: 0.5rem;
+    }
+    .cause-list li:last-child {
+      margin-bottom: 0;
+    }
+
+    .dev-note {
+      border-left: 4px solid var(--cysd-primary);
+      background-color: #eff6ff;
+      border-radius: 6px;
+      padding: 1rem;
+      font-size: 0.85rem;
+      color: #1e3a8a;
+    }
+
+    .dev-note code {
+      background-color: #dbeafe;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+      color: #1d4ed8;
+    }
+  </style>
+</head>
+<body>
+
+<div class="error-card">
+  <div class="error-icon">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+  </div>
+  
+  <h3 class="error-title">Workspace Not Found</h3>
+  <p class="error-description">
+    The organization subdomain in the URL does not match any registered workspace on this platform.
+  </p>
+
+  <h5 class="fs-6 fw-semibold mb-2">Likely Causes:</h5>
+  <ul class="cause-list">
+    <li>The subdomain in the URL may be mistyped.</li>
+    <li>The requested workspace has not yet been provisioned.</li>
+    <li>You are attempting to access a different environment.</li>
+  </ul>
+
+  {% if debug %}
+    <div class="dev-note mt-4">
+      <div class="fw-bold mb-1"><i class="bi bi-bug-fill me-1"></i>Developer Note:</div>
+      <p class="mb-2">This workspace could not be resolved. Currently registered Enterprise subdomains:</p>
+      {% if registered_subdomains %}
+        <ul class="mb-2 ps-3">
+          {% for sub in registered_subdomains %}
+            <li><code>{{ sub }}</code></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="mb-2 text-danger">No Enterprise subdomains registered in database.</p>
+        <p class="mb-0">
+          Hint: Run <code>py manage.py setup_test_tenants</code> to populate the default test tenants.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+</body>
+</html>
