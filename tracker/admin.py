@@ -331,7 +331,7 @@ class MeetingAdmin(TenantBaseAdmin):
     list_display_links = ('title',)
     list_filter = ('status', 'meeting_type', 'domain', 'date')
     search_fields = ('title', 'venue', 'organised_by', 'agenda', 'minutes')
-    filter_horizontal = ('attendees',)
+    autocomplete_fields = ('attendees',)
     date_hierarchy = 'date'
     ordering = ('-date', '-start_time')
     readonly_fields = ('created_at', 'updated_at', 'attendee_count_display')
@@ -441,8 +441,7 @@ class TaskAdmin(TenantBaseAdmin):
     list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge', 'hours_logged')
     list_filter = ('status', 'project', 'assigned_to', 'due_date')
     search_fields = ('title', 'project__title', 'assigned_to__name')
-    autocomplete_fields = ('project',)
-    filter_horizontal = ('assigned_to',)
+    autocomplete_fields = ('project', 'assigned_to')
     ordering = ('due_date', 'title')
     readonly_fields = ('created_at', 'updated_at')
 
