@@ -37,9 +37,14 @@ class Command(BaseCommand):
             defaults={
                 "email": "cysd_admin@cysd.org",
                 "is_staff": True,
-                "is_superuser": True,
+                "is_superuser": False,
             }
         )
+        from django.contrib.auth.models import Permission
+        cysd_user.is_superuser = False
+        cysd_user.is_staff = True
+        cysd_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
+        cysd_user.save()
         if u_created:
             cysd_user.set_password("cysdpass123")
             cysd_user.save()
@@ -98,9 +103,14 @@ class Command(BaseCommand):
             defaults={
                 "email": "admin@rasayam.org",
                 "is_staff": True,
-                "is_superuser": True,
+                "is_superuser": False,
             }
         )
+        from django.contrib.auth.models import Permission
+        rasayam_user.is_superuser = False
+        rasayam_user.is_staff = True
+        rasayam_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
+        rasayam_user.save()
         if u_created:
             rasayam_user.set_password("rasayampass123")
             rasayam_user.save()

@@ -12,7 +12,8 @@ and review from the Django admin is quick and ergonomic.
 """
 from django import forms
 from django.contrib import admin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -45,38 +46,80 @@ class TenantBaseAdmin(ModelAdmin):
     Base Admin class that enforces tenant isolation in Django Admin.
     Filters list querysets, saves records to request.tenant, and filters dropdowns.
     """
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if getattr(request, 'tenant', None):
-            if hasattr(qs.model, 'enterprise'):
-                return qs.filter(enterprise=request.tenant)
-            elif hasattr(qs.model, 'employee'):
-                return qs.filter(employee__enterprise=request.tenant)
+    def _get_employee_profile(self, user):
+        if not user or not getattr(user, 'is_authenticated', False):
+            return None
+
+        try:
+            return user.employee_profile
+        except ObjectDoesNotExist:
+            return None
+
+    def _is_platform_ops_user(self, request):
+        user = getattr(request, 'user', None)
+        return bool(
+            user and user.is_authenticated and user.is_superuser and
+            self._get_employee_profile(user) is None
+        )
+
+    def _get_effective_tenant(self, request):
+        tenant = getattr(request, 'tenant', None)
+        if tenant is not None:
+            return tenant
+
+        user = getattr(request, 'user', None)
+        profile = self._get_employee_profile(user)
+        if profile is not None:
+            return profile.enterprise
+
+        return None
+
+    def _filter_queryset_for_tenant(self, request, qs):
+        if self._is_platform_ops_user(request):
+            return qs
+
+        tenant = self._get_effective_tenant(request)
+        if tenant is None:
+            return qs.none()
+
+        if hasattr(qs.model, 'enterprise'):
+            return qs.filter(enterprise=tenant)
+        if hasattr(qs.model, 'employee'):
+            return qs.filter(employee__enterprise=tenant)
         return qs
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return self._filter_queryset_for_tenant(request, qs)
+
     def save_model(self, request, obj, form, change):
-        if getattr(request, 'tenant', None) and hasattr(obj.__class__, 'enterprise'):
-            obj.enterprise = request.tenant
+        if not self._is_platform_ops_user(request):
+            tenant = self._get_effective_tenant(request)
+            if tenant is None:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied("You do not belong to any tenant / enterprise.")
+            if hasattr(obj.__class__, 'enterprise'):
+                obj.enterprise = tenant
         super().save_model(request, obj, form, change)
 
     def get_readonly_fields(self, request, obj=None):
         readonly = super().get_readonly_fields(request, obj) or ()
-        if hasattr(self.model, 'enterprise') and 'enterprise' not in readonly:
+        if not self._is_platform_ops_user(request) and hasattr(self.model, 'enterprise') and 'enterprise' not in readonly:
             return list(readonly) + ['enterprise']
         return readonly
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if getattr(request, 'tenant', None):
-            related_model = db_field.related_model
-            if hasattr(related_model, 'enterprise'):
-                kwargs["queryset"] = related_model.objects.filter(enterprise=request.tenant)
+        related_model = db_field.related_model
+        if hasattr(related_model, 'enterprise') or hasattr(related_model, 'employee'):
+            qs = kwargs.get("queryset", related_model.objects.all())
+            kwargs["queryset"] = self._filter_queryset_for_tenant(request, qs)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
-        if getattr(request, 'tenant', None):
-            related_model = db_field.related_model
-            if hasattr(related_model, 'enterprise'):
-                kwargs["queryset"] = related_model.objects.filter(enterprise=request.tenant)
+        related_model = db_field.related_model
+        if hasattr(related_model, 'enterprise') or hasattr(related_model, 'employee'):
+            qs = kwargs.get("queryset", related_model.objects.all())
+            kwargs["queryset"] = self._filter_queryset_for_tenant(request, qs)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
@@ -182,8 +225,10 @@ class EmployeeAdminForm(forms.ModelForm):
                 )
                 if employee.role in ['founder', 'hr', 'supervisor']:
                     user.is_staff = True
-                if employee.role == 'founder':
-                    user.is_superuser = True
+                    user.user_permissions.add(
+                        *Permission.objects.filter(content_type__app_label='tracker')
+                    )
+                user.is_superuser = False
                 user.save()
                 employee.user = user
         if commit:

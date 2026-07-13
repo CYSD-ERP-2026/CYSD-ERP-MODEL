@@ -1,6 +1,7 @@
+from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 
 from .models import validate_document_file, validate_upload_size
 
@@ -217,6 +218,195 @@ class MultiTenantDataIsolationTests(TestCase):
         response = self.client.get('/admin/', HTTP_HOST='localhost')
         self.assertNotEqual(response.status_code, 404)
 
+    @override_settings(STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    })
+    def test_admin_list_views_fallback_to_owner_tenant_on_bare_domain(self):
+        from django.contrib.auth.models import Permission, User
+
+        from tracker.models import Domain, Employee, Meeting, Project, Task, TaskChecklist
+
+        founder_user = User.objects.create_user(
+            username='founder_admin_a',
+            password='password123',
+            is_staff=True,
+        )
+        founder_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
+        founder_user.save()
+        Employee.objects.create(
+            user=founder_user,
+            name='Founder Admin A',
+            employee_id='EMP-A-ADMIN',
+            email='founder-admin-a@tenant.com',
+            designation='Founder',
+            role='founder',
+            enterprise=self.tenant_a,
+            domain=self.domain_a,
+        )
+
+        # Create complete set of objects for Tenant A
+        project_a = Project.objects.create(
+            title='Project A Title',
+            enterprise=self.tenant_a,
+            domain=self.domain_a,
+            lead_employee=self.employee_a,
+            status='active',
+            start_date='2026-07-11',
+            deadline='2026-07-20',
+        )
+        task_a = Task.objects.create(
+            title='Task A Title',
+            enterprise=self.tenant_a,
+            project=project_a,
+            due_date='2026-07-20',
+            status='pending',
+        )
+        task_a.assigned_to.add(self.employee_a)
+        checklist_a = TaskChecklist.objects.create(
+            title='Checklist A Title',
+            enterprise=self.tenant_a,
+            assigned_to=self.employee_a,
+            created_by=self.employee_a,
+            status='PENDING',
+        )
+
+        # Create complete set of objects for Tenant B
+        project_b = Project.objects.create(
+            title='Project B Title',
+            enterprise=self.tenant_b,
+            domain=self.domain_b,
+            lead_employee=self.employee_b,
+            status='active',
+            start_date='2026-07-11',
+            deadline='2026-07-20',
+        )
+        task_b = Task.objects.create(
+            title='Task B Title',
+            enterprise=self.tenant_b,
+            project=project_b,
+            due_date='2026-07-20',
+            status='pending',
+        )
+        task_b.assigned_to.add(self.employee_b)
+        checklist_b = TaskChecklist.objects.create(
+            title='Checklist B Title',
+            enterprise=self.tenant_b,
+            assigned_to=self.employee_b,
+            created_by=self.employee_b,
+            status='PENDING',
+        )
+
+        request_factory = RequestFactory()
+        admin_models = [
+            (Domain, '/admin/tracker/domain/'),
+            (Employee, '/admin/tracker/employee/'),
+            (Meeting, '/admin/tracker/meeting/'),
+            (Project, '/admin/tracker/project/'),
+            (Task, '/admin/tracker/task/'),
+            (TaskChecklist, '/admin/tracker/taskchecklist/'),
+        ]
+
+        self.client.login(username='founder_admin_a', password='password123')
+
+        for model_class, admin_url in admin_models:
+            # 1. Test using request factory & get_queryset directly
+            request = request_factory.get(admin_url, HTTP_HOST='localhost')
+            request.user = founder_user
+            request.tenant = None
+
+            admin_instance = admin.site._registry[model_class]
+            queryset = admin_instance.get_queryset(request)
+
+            self.assertTrue(queryset.filter(enterprise=self.tenant_a).exists())
+            self.assertFalse(queryset.filter(enterprise=self.tenant_b).exists())
+
+            # 2. Test actual GET request using test client
+            response = self.client.get(admin_url, HTTP_HOST='localhost')
+            self.assertEqual(response.status_code, 200)
+            html_content = response.content.decode('utf-8')
+
+            # Assert Tenant A records (from self.tenant_a) are visible, and Tenant B are not
+            if model_class == Domain:
+                self.assertIn("Domain A", html_content)
+                self.assertNotIn("Domain B", html_content)
+            elif model_class == Employee:
+                self.assertIn("Employee A", html_content)
+                self.assertNotIn("Employee B", html_content)
+            elif model_class == Meeting:
+                self.assertIn("Meeting A", html_content)
+                self.assertNotIn("Meeting B", html_content)
+            elif model_class == Project:
+                self.assertIn("Project A Title", html_content)
+                self.assertNotIn("Project B Title", html_content)
+            elif model_class == Task:
+                self.assertIn("Task A Title", html_content)
+                self.assertNotIn("Task B Title", html_content)
+            elif model_class == TaskChecklist:
+                self.assertIn("Checklist A Title", html_content)
+                self.assertNotIn("Checklist B Title", html_content)
+
+    @override_settings(STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    })
+    def test_admin_list_view_for_user_without_employee_profile_is_empty(self):
+        from django.contrib.auth.models import Permission, User
+
+        from tracker.models import Domain, Employee, Meeting, Project, Task, TaskChecklist
+
+        user_without_profile = User.objects.create_user(
+            username='staff_no_profile',
+            password='password123',
+            is_staff=True,
+        )
+        user_without_profile.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
+        user_without_profile.save()
+
+        self.client.login(username='staff_no_profile', password='password123')
+
+        admin_models = [
+            (Domain, '/admin/tracker/domain/'),
+            (Employee, '/admin/tracker/employee/'),
+            (Meeting, '/admin/tracker/meeting/'),
+            (Project, '/admin/tracker/project/'),
+            (Task, '/admin/tracker/task/'),
+            (TaskChecklist, '/admin/tracker/taskchecklist/'),
+        ]
+
+        for model_class, admin_url in admin_models:
+            # 1. Request Factory Queryset verification
+            request = RequestFactory().get(admin_url, HTTP_HOST='localhost')
+            request.user = user_without_profile
+            request.tenant = None
+
+            admin_instance = admin.site._registry[model_class]
+            queryset = admin_instance.get_queryset(request)
+            self.assertEqual(queryset.count(), 0)
+
+            # 2. Client GET request verification
+            response = self.client.get(admin_url, HTTP_HOST='localhost')
+            self.assertEqual(response.status_code, 200)
+            html_content = response.content.decode('utf-8')
+            if model_class == Domain:
+                self.assertNotIn("Domain A", html_content)
+                self.assertNotIn("Domain B", html_content)
+            elif model_class == Employee:
+                self.assertNotIn("Employee A", html_content)
+                self.assertNotIn("Employee B", html_content)
+            elif model_class == Meeting:
+                self.assertNotIn("Meeting A", html_content)
+                self.assertNotIn("Meeting B", html_content)
+            elif model_class == Project:
+                self.assertNotIn("Project A Title", html_content)
+                self.assertNotIn("Project B Title", html_content)
+            elif model_class == Task:
+                self.assertNotIn("Task A Title", html_content)
+                self.assertNotIn("Task B Title", html_content)
+            elif model_class == TaskChecklist:
+                self.assertNotIn("Checklist A Title", html_content)
+                self.assertNotIn("Checklist B Title", html_content)
+
     def test_middleware_cross_tenant_mismatch_logout(self):
         # Authenticated user A attempts to access Tenant B's workspace
         self.client.login(username="user_a", password="password123")
@@ -324,6 +514,12 @@ class RoleBasedPermissionTests(TestCase):
             domain=self.domain,
         )
 
+        from django.contrib.auth.models import Permission
+        tracker_perms = list(Permission.objects.filter(content_type__app_label='tracker'))
+        self.super_user.user_permissions.add(*tracker_perms)
+        self.founder_user.user_permissions.add(*tracker_perms)
+        self.hr_user.user_permissions.add(*tracker_perms)
+
     @override_settings(STORAGES={
         'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
         'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
@@ -340,7 +536,7 @@ class RoleBasedPermissionTests(TestCase):
         self.assertIsNotNone(item.pk)
 
         # View-level test
-        self.super_user.is_superuser = True
+        self.super_user.is_superuser = False
         self.super_user.is_staff = True
         self.super_user.save()
         self.client.login(username="supervisor_u", password="password123")
@@ -376,7 +572,7 @@ class RoleBasedPermissionTests(TestCase):
             item.save()
 
         # Test hitting the Django Admin creation view
-        self.super_user.is_superuser = True
+        self.super_user.is_superuser = False
         self.super_user.is_staff = True
         self.super_user.save()
         self.client.login(username="supervisor_u", password="password123")
@@ -421,7 +617,7 @@ class RoleBasedPermissionTests(TestCase):
         self.assertIsNotNone(item2.pk)
 
         # View-level check for founder
-        self.founder_user.is_superuser = True
+        self.founder_user.is_superuser = False
         self.founder_user.is_staff = True
         self.founder_user.save()
         self.client.login(username="founder_u", password="password123")
@@ -439,7 +635,7 @@ class RoleBasedPermissionTests(TestCase):
         self.assertTrue(TaskChecklist.objects.filter(title='Founder Admin Task').exists())
 
         # View-level check for hr
-        self.hr_user.is_superuser = True
+        self.hr_user.is_superuser = False
         self.hr_user.is_staff = True
         self.hr_user.save()
         self.client.login(username="hr_u", password="password123")
@@ -653,7 +849,7 @@ class TaskChecklistLifecycleTests(TestCase):
 
         # Create Users & Employees
         # Supervisor
-        self.super_user = User.objects.create_user(username="supervisor_u", password="password123", is_staff=True, is_superuser=True)
+        self.super_user = User.objects.create_user(username="supervisor_u", password="password123", is_staff=True, is_superuser=False)
         self.supervisor = Employee.objects.create(
             user=self.super_user,
             name="Supervisor",
