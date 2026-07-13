@@ -20,10 +20,15 @@ class TenantMiddleware:
         # e.g., 'cysd.localhost' -> parts = ['cysd', 'localhost']
         # e.g., 'cysd.myapp.com' -> parts = ['cysd', 'myapp', 'com']
         subdomain = None
-        if len(parts) > 2:
-            subdomain = parts[0]
-        elif len(parts) == 2 and parts[1] == 'localhost':
-            subdomain = parts[0]
+        if 'ngrok-free.dev' in host:
+            if len(parts) > 3:
+                subdomain = parts[0]
+        elif 'localhost' in host:
+            if len(parts) > 1 and parts[-1] == 'localhost':
+                subdomain = parts[0]
+        else:
+            if len(parts) > 2:
+                subdomain = parts[0]
 
         request.tenant = None
 
