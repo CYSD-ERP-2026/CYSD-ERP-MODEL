@@ -39,6 +39,10 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
+    - name: Run pip-audit check
+      run: |
+        pip-audit -r requirements.txt
+
     - name: Run Ruff Lint check
       run: |
         python -m ruff check .
