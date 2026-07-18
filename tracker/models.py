@@ -589,31 +589,40 @@ class TaskChecklist(models.Model):
 
     def clean(self):
         """
-        Enforce creation / assignment rules:
-          1. created_by must have role founder, hr, or supervisor.
-          2. A supervisor may only assign to their own direct subordinates.
+        Enforce creation / assignment rules using EmployeePermission:
+          1. created_by must have can_assign_checklist_items permission.
+          2. If checklist_assign_scope is 'own_team', only direct reports
+             may be assigned to.
+          3. If scope is 'all', any employee in the enterprise may be assigned.
         """
         from django.core.exceptions import ValidationError
 
         if self.created_by is None:
             return  # skip validation during programmatic creation without a creator
 
-        creator_role = self.created_by.role
-        allowed_creator_roles = ('founder', 'hr', 'supervisor')
+        perms = getattr(self.created_by, 'permissions', None)
 
-        if creator_role not in allowed_creator_roles:
+        if not perms or not perms.can_assign_checklist_items:
             raise ValidationError(
-                f'Only Founders, HR, or Supervisors can create checklist items. '
-                f'"{self.created_by.name}" has role "{creator_role}".'
+                f'Only employees with checklist assignment permission can '
+                f'create checklist items. '
+                f'"{self.created_by.name}" does not have this permission.'
             )
 
-        if creator_role == 'supervisor':
-            # Supervisors are restricted to their own direct reports
+        if perms.checklist_assign_scope == 'own_team':
+            # Scoped to own team — only direct reports allowed
             if self.assigned_to.supervisor_id != self.created_by.pk:
                 raise ValidationError(
-                    f'Supervisor "{self.created_by.name}" can only assign tasks to '
+                    f'"{self.created_by.name}" can only assign tasks to '
                     f'their direct reports. "{self.assigned_to.name}" does not report to them.'
                 )
+        elif perms.checklist_assign_scope == 'none':
+            raise ValidationError(
+                f'"{self.created_by.name}" has checklist assignment permission '
+                f'but scope is set to "none".'
+            )
+        # scope == 'all' → no restriction on assigned_to
+
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -724,6 +733,105 @@ class Enterprise(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.subdomain})"
+
+
+# ---------------------------------------------------------------------------
+# EmployeePermission  –  fine-grained permission flags per employee
+# ---------------------------------------------------------------------------
+
+PERMISSION_SCOPE_CHOICES = [
+    ('none', 'None'),
+    ('own_team', 'Own Team'),
+    ('all', 'All'),
+]
+
+
+class EmployeePermission(models.Model):
+    """
+    Fine-grained permission record for each Employee.
+
+    Replaces the coarse role-based checks that were previously scattered
+    across views, models, and admin forms.  The ``role`` field on Employee
+    is retained as a *template*: when a new employee is created, the role
+    seeds a default EmployeePermission row using the mapping table defined
+    in migration 0013.  Admins can then customise individual flags via the
+    toggle UI without touching the role field.
+
+    All boolean fields default to **False** and all scope fields default to
+    **'none'** so that a migration or code bug always results in *less*
+    access than intended, never more.
+    """
+    employee = models.OneToOneField(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name='permissions',
+        primary_key=True,
+    )
+
+    # ── Boolean permission flags (8) ──
+    can_manage_employees = models.BooleanField(
+        default=False,
+        help_text='Can create / edit / deactivate employee records',
+    )
+    can_manage_organization = models.BooleanField(
+        default=False,
+        help_text='Can edit enterprise / organisation settings',
+    )
+    can_view_advanced_analytics = models.BooleanField(
+        default=False,
+        help_text='Can access the employee-performance analytics page',
+    )
+    can_assign_checklist_items = models.BooleanField(
+        default=False,
+        help_text='Can create TaskChecklist items and assign them to employees',
+    )
+    can_approve_checklist_items = models.BooleanField(
+        default=False,
+        help_text='Can approve / reject submitted TaskChecklist items',
+    )
+    can_read_confidential_meetings = models.BooleanField(
+        default=False,
+        help_text='Can view full meeting agenda, minutes, and action points '
+                  '(when False, these fields are masked)',
+    )
+    can_log_hours = models.BooleanField(
+        default=False,
+        help_text='Can log hours on tasks assigned to them',
+    )
+    can_access_admin_panel = models.BooleanField(
+        default=False,
+        help_text='Grants is_staff + tracker app permissions on the linked User',
+    )
+
+    # ── Scope fields (3) ──
+    checklist_assign_scope = models.CharField(
+        max_length=10,
+        choices=PERMISSION_SCOPE_CHOICES,
+        default='none',
+        help_text="'none' = cannot assign, 'own_team' = direct reports only, "
+                  "'all' = any employee in the enterprise",
+    )
+    checklist_approve_scope = models.CharField(
+        max_length=10,
+        choices=PERMISSION_SCOPE_CHOICES,
+        default='none',
+        help_text="'none' = cannot approve, 'own_team' = direct reports only, "
+                  "'all' = any employee in the enterprise",
+    )
+    analytics_scope = models.CharField(
+        max_length=10,
+        choices=PERMISSION_SCOPE_CHOICES,
+        default='none',
+        help_text="'none' = own data only, 'own_team' = own direct reports, "
+                  "'all' = entire enterprise",
+    )
+
+    class Meta:
+        verbose_name = 'Employee Permission'
+        verbose_name_plural = 'Employee Permissions'
+
+    def __str__(self):
+        return f'Permissions for {self.employee.name}'
 
 
 

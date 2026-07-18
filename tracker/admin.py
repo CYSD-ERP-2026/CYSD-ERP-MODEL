@@ -12,7 +12,7 @@ and review from the Django admin is quick and ergonomic.
 """
 from django import forms
 from django.contrib import admin
-from django.contrib.auth.models import Permission, User
+from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
@@ -223,11 +223,6 @@ class EmployeeAdminForm(forms.ModelForm):
                     password=password,
                     email=employee.email
                 )
-                if employee.role in ['founder', 'hr', 'supervisor']:
-                    user.is_staff = True
-                    user.user_permissions.add(
-                        *Permission.objects.filter(content_type__app_label='tracker')
-                    )
                 user.is_superuser = False
                 user.save()
                 employee.user = user
@@ -495,6 +490,14 @@ class TaskChecklistAdmin(TenantBaseAdmin):
     autocomplete_fields = ('assigned_to', 'created_by')
     ordering = ('-created_at',)
     readonly_fields = ('submitted_at', 'resolved_at', 'created_at', 'updated_at')
+
+    def has_add_permission(self, request):
+        if not super().has_add_permission(request):
+            return False
+        if self._is_platform_ops_user(request):
+            return True
+        profile = self._get_employee_profile(request.user)
+        return bool(profile and hasattr(profile, 'permissions') and profile.permissions.can_assign_checklist_items)
 
     fieldsets = (
         ('Task Details', {

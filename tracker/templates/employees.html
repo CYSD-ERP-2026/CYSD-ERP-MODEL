@@ -189,7 +189,22 @@
       </div>
 
       <!-- Body -->
-      <div class="modal-body p-4">
+      <div class="modal-body p-0">
+        {% if can_manage_employees %}
+        <ul class="nav nav-tabs px-4 pt-3" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="profile-tab-{{ e.id }}" data-bs-toggle="tab" data-bs-target="#profile-{{ e.id }}" type="button" role="tab" style="font-weight: 600;">Profile Details</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="permissions-tab-{{ e.id }}" data-bs-toggle="tab" data-bs-target="#permissions-{{ e.id }}" type="button" role="tab" style="font-weight: 600;">Permissions <span class="badge bg-primary ms-1" style="font-size:0.65rem;">Beta</span></button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active p-4" id="profile-{{ e.id }}" role="tabpanel">
+        {% else %}
+        <div class="p-4">
+        {% endif %}
+        
         <div class="row g-4">
 
           <!-- Left: photo + status -->
@@ -304,6 +319,93 @@
           </div>
 
         </div>
+        
+        {% if can_manage_employees %}
+          </div><!-- end profile tab pane -->
+          
+          <div class="tab-pane fade p-4" id="permissions-{{ e.id }}" role="tabpanel">
+            <form onsubmit="savePermissions(event, {{ e.id }})" id="permissions-form-{{ e.id }}">
+              {% csrf_token %}
+              <div class="row g-3">
+                <div class="col-12">
+                  <h6 class="mb-0 text-primary"><i class="bi bi-shield-lock me-2"></i>Access Controls</h6>
+                  <small class="text-muted">Toggle fine-grained permissions for this employee.</small>
+                </div>
+                
+                <div class="col-md-6">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-manage-emp-{{ e.id }}" name="can_manage_employees" {% if e.permissions.can_manage_employees %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-manage-emp-{{ e.id }}">Manage Employees</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-manage-org-{{ e.id }}" name="can_manage_organization" {% if e.permissions.can_manage_organization %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-manage-org-{{ e.id }}">Manage Organization</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-view-adv-{{ e.id }}" name="can_view_advanced_analytics" {% if e.permissions.can_view_advanced_analytics %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-view-adv-{{ e.id }}">View Advanced Analytics</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-read-conf-{{ e.id }}" name="can_read_confidential_meetings" {% if e.permissions.can_read_confidential_meetings %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-read-conf-{{ e.id }}">Read Confidential Meetings</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-log-hrs-{{ e.id }}" name="can_log_hours" {% if e.permissions.can_log_hours %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-log-hrs-{{ e.id }}">Can Log Hours</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-access-admin-{{ e.id }}" name="can_access_admin_panel" {% if e.permissions.can_access_admin_panel %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-access-admin-{{ e.id }}">Access Admin Panel</label>
+                  </div>
+                </div>
+                
+                <div class="col-md-6">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-assign-chk-{{ e.id }}" name="can_assign_checklist_items" {% if e.permissions.can_assign_checklist_items %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-assign-chk-{{ e.id }}">Assign Checklist Items</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="perm-approve-chk-{{ e.id }}" name="can_approve_checklist_items" {% if e.permissions.can_approve_checklist_items %}checked{% endif %}>
+                    <label class="form-check-label" for="perm-approve-chk-{{ e.id }}">Approve Checklist Items</label>
+                  </div>
+                  
+                  <hr class="my-2 text-muted">
+                  
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Checklist Assign Scope</label>
+                    <select class="form-select form-select-sm" name="checklist_assign_scope">
+                      <option value="none" {% if e.permissions.checklist_assign_scope == 'none' %}selected{% endif %}>None</option>
+                      <option value="own_team" {% if e.permissions.checklist_assign_scope == 'own_team' %}selected{% endif %}>Own Team</option>
+                      <option value="all" {% if e.permissions.checklist_assign_scope == 'all' %}selected{% endif %}>All</option>
+                    </select>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Checklist Approve Scope</label>
+                    <select class="form-select form-select-sm" name="checklist_approve_scope">
+                      <option value="none" {% if e.permissions.checklist_approve_scope == 'none' %}selected{% endif %}>None</option>
+                      <option value="own_team" {% if e.permissions.checklist_approve_scope == 'own_team' %}selected{% endif %}>Own Team</option>
+                      <option value="all" {% if e.permissions.checklist_approve_scope == 'all' %}selected{% endif %}>All</option>
+                    </select>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Analytics Scope</label>
+                    <select class="form-select form-select-sm" name="analytics_scope">
+                      <option value="none" {% if e.permissions.analytics_scope == 'none' %}selected{% endif %}>None</option>
+                      <option value="own_team" {% if e.permissions.analytics_scope == 'own_team' %}selected{% endif %}>Own Team</option>
+                      <option value="all" {% if e.permissions.analytics_scope == 'all' %}selected{% endif %}>All</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 d-flex justify-content-end">
+                 <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Save Permissions</button>
+              </div>
+            </form>
+          </div>
+        </div><!-- end tab-content -->
+        {% else %}
+        </div>
+        {% endif %}
       </div>
 
       <!-- Footer -->
@@ -318,4 +420,58 @@
   </div>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function savePermissions(event, empId) {
+    event.preventDefault();
+    const form = document.getElementById(`permissions-form-${empId}`);
+    const btn = form.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    
+    const data = {
+        can_manage_employees: form.querySelector(`[name="can_manage_employees"]`).checked,
+        can_manage_organization: form.querySelector(`[name="can_manage_organization"]`).checked,
+        can_view_advanced_analytics: form.querySelector(`[name="can_view_advanced_analytics"]`).checked,
+        can_assign_checklist_items: form.querySelector(`[name="can_assign_checklist_items"]`).checked,
+        can_approve_checklist_items: form.querySelector(`[name="can_approve_checklist_items"]`).checked,
+        can_read_confidential_meetings: form.querySelector(`[name="can_read_confidential_meetings"]`).checked,
+        can_log_hours: form.querySelector(`[name="can_log_hours"]`).checked,
+        can_access_admin_panel: form.querySelector(`[name="can_access_admin_panel"]`).checked,
+        checklist_assign_scope: form.querySelector(`[name="checklist_assign_scope"]`).value,
+        checklist_approve_scope: form.querySelector(`[name="checklist_approve_scope"]`).value,
+        analytics_scope: form.querySelector(`[name="analytics_scope"]`).value,
+    };
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+    btn.disabled = true;
+    
+    fetch(`/dashboard/employees/${empId}/permissions/`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show a quick success toast or alert
+            alert('Permissions updated successfully.');
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('An error occurred.');
+        console.error(error);
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
 {% endblock %}

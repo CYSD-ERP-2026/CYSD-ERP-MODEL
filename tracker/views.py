@@ -109,34 +109,37 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         .order_by('-date', '-start_time')[:10]
     )
 
-    # Mask sensitive details for HR role
+    # Mask sensitive details based on permission (replaces HR role check)
     recent_meetings = list(recent_meetings)
     profile = getattr(request.user, 'employee_profile', None)
-    if profile and profile.role == 'hr':
-        for m in recent_meetings:
-            m.agenda = 'Confidential - Access Restricted'
-            m.minutes = 'Confidential - Access Restricted'
-            m.action_points = 'Confidential - Access Restricted'
+    if profile:
+        perms = getattr(profile, 'permissions', None)
+        if not perms or not perms.can_read_confidential_meetings:
+            for m in recent_meetings:
+                m.agenda = 'Confidential - Access Restricted'
+                m.minutes = 'Confidential - Access Restricted'
+                m.action_points = 'Confidential - Access Restricted'
 
     # Task Checklist dashboard integration
     awaiting_verification_count = 0
     personal_checklist_stats = None
     role = 'founder' if request.user.is_superuser else getattr(profile, 'role', 'employee')
 
-    # Subordinate verification counts for supervisors, founders, and HR
-    if role in ('founder', 'hr', 'supervisor'):
-        if role == 'supervisor' and profile:
-            subordinate_ids = list(
-                Employee.objects.filter(enterprise=request.tenant, supervisor=profile).values_list('id', flat=True)
-            )
-            awaiting_verification_count = TaskChecklist.objects.filter(
-                enterprise=request.tenant, assigned_to__id__in=subordinate_ids, status='AWAITING_VERIFICATION'
-            ).count()
-        else:
-            # founder/hr/superuser can verify all
-            awaiting_verification_count = TaskChecklist.objects.filter(
-                enterprise=request.tenant, status='AWAITING_VERIFICATION'
-            ).count()
+    # Subordinate verification counts based on checklist_approve_scope
+    if profile:
+        perms = getattr(profile, 'permissions', None)
+        if perms and perms.can_approve_checklist_items:
+            if perms.checklist_approve_scope == 'own_team':
+                subordinate_ids = list(
+                    Employee.objects.filter(enterprise=request.tenant, supervisor=profile).values_list('id', flat=True)
+                )
+                awaiting_verification_count = TaskChecklist.objects.filter(
+                    enterprise=request.tenant, assigned_to__id__in=subordinate_ids, status='AWAITING_VERIFICATION'
+                ).count()
+            elif perms.checklist_approve_scope == 'all':
+                awaiting_verification_count = TaskChecklist.objects.filter(
+                    enterprise=request.tenant, status='AWAITING_VERIFICATION'
+                ).count()
 
     # Personal checklist progress snapshot
     if profile:
@@ -244,12 +247,65 @@ def employees_list_view(request):
         .order_by('name')
     )
     employee_filter = EmployeeFilter(request.GET, queryset=qs, request=request)
+    profile = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile, 'permissions', None) if profile else None
+    
     context = {
         'filter': employee_filter,
         'employees': employee_filter.qs,
+        'can_manage_employees': getattr(perms, 'can_manage_employees', False) if perms else False,
         'generated_at': timezone.now(),
     }
     return render(request, 'employees.html', context)
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.shortcuts import get_object_or_404
+from .models import EmployeePermission
+
+@login_required
+@require_http_methods(["PATCH"])
+def update_employee_permissions(request, emp_id):
+    caller_profile = getattr(request.user, 'employee_profile', None)
+    if not caller_profile:
+        return JsonResponse({'error': 'You must be an employee to do this.'}, status=403)
+        
+    caller_perms = getattr(caller_profile, 'permissions', None)
+    if not caller_perms or not caller_perms.can_manage_employees:
+        return JsonResponse({'error': 'You do not have permission to manage employees.'}, status=403)
+
+    target_employee = get_object_or_404(Employee, id=emp_id, enterprise=request.tenant)
+    target_perms = getattr(target_employee, 'permissions', None)
+    if not target_perms:
+        target_perms = EmployeePermission.objects.create(employee=target_employee)
+
+    try:
+        data = json.loads(request.body)
+        
+        allowed_fields = [
+            'can_manage_employees',
+            'can_manage_organization',
+            'can_view_advanced_analytics',
+            'can_assign_checklist_items',
+            'can_approve_checklist_items',
+            'can_read_confidential_meetings',
+            'can_log_hours',
+            'can_access_admin_panel',
+            'checklist_assign_scope',
+            'checklist_approve_scope',
+            'analytics_scope',
+        ]
+        
+        for field in allowed_fields:
+            if field in data:
+                setattr(target_perms, field, data[field])
+                
+        target_perms.save()
+        return JsonResponse({'success': True})
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @login_required
@@ -266,13 +322,15 @@ def meetings_list_view(request):
     meeting_filter = MeetingFilter(request.GET, queryset=qs, request=request)
     meetings = list(meeting_filter.qs)
 
-    # Mask sensitive details for HR role
+    # Mask sensitive details based on permission (replaces HR role check)
     profile = getattr(request.user, 'employee_profile', None)
-    if profile and profile.role == 'hr':
-        for m in meetings:
-            m.agenda = 'Confidential - Access Restricted'
-            m.minutes = 'Confidential - Access Restricted'
-            m.action_points = 'Confidential - Access Restricted'
+    if profile:
+        perms = getattr(profile, 'permissions', None)
+        if not perms or not perms.can_read_confidential_meetings:
+            for m in meetings:
+                m.agenda = 'Confidential - Access Restricted'
+                m.minutes = 'Confidential - Access Restricted'
+                m.action_points = 'Confidential - Access Restricted'
 
     context = {
         'filter': meeting_filter,
@@ -361,12 +419,16 @@ def policy_analytics_view(request: HttpRequest) -> HttpResponse:
 def employee_performance_view(request: HttpRequest) -> HttpResponse:
     """View to analyze employee workloads and task efficiency using Chart.js with caching and prefetch."""
     profile = getattr(request.user, 'employee_profile', None)
-    role = 'founder' if request.user.is_superuser else 'employee'
-    if profile:
-        role = profile.role
+
+    # Determine analytics scope from permissions
+    perms = getattr(profile, 'permissions', None) if profile else None
+    if perms and perms.can_view_advanced_analytics:
+        analytics_scope = perms.analytics_scope  # 'all', 'own_team', or 'none'
+    else:
+        analytics_scope = 'none'  # own data only
 
     # Generate a secure cache fingerprint incorporating:
-    # 1. User role & ID (for Row-Level Security)
+    # 1. Analytics scope & user ID (for Row-Level Security)
     # 2. Total active tasks & latest update
     # 3. Total active projects & latest update
     tasks_count = Task.objects.filter(enterprise=request.tenant).count()
@@ -378,7 +440,7 @@ def employee_performance_view(request: HttpRequest) -> HttpResponse:
     latest_proj_token = latest_proj_update.isoformat() if latest_proj_update else 'none'
 
     cache_key = (
-        f"emp_perf:{request.tenant.subdomain}:{role}:{request.user.id}:"
+        f"emp_perf:{request.tenant.subdomain}:{analytics_scope}:{request.user.id}:"
         f"{tasks_count}:{latest_task_token}:"
         f"{projects_count}:{latest_proj_token}"
     )
@@ -387,11 +449,11 @@ def employee_performance_view(request: HttpRequest) -> HttpResponse:
     if context is not None:
         return render(request, 'employee_analytics.html', context)
 
-    # Enforce Row-Level Security: Filter base querysets based on role and scope to request.tenant
-    if role in ['founder', 'hr']:
+    # Enforce Row-Level Security: Filter base querysets based on analytics_scope
+    if analytics_scope == 'all':
         tasks_qs = Task.objects.filter(enterprise=request.tenant)
         employees_base_qs = Employee.objects.filter(enterprise=request.tenant, is_active=True)
-    elif role == 'supervisor':
+    elif analytics_scope == 'own_team':
         tasks_qs = Task.objects.filter(enterprise=request.tenant, assigned_to__supervisor=profile)
         employees_base_qs = Employee.objects.filter(enterprise=request.tenant, supervisor=profile, is_active=True)
     else:
@@ -748,18 +810,21 @@ def checklist_supervisor_view(request):
     Accessible by supervisor, hr, and founder only.
     """
     profile = getattr(request.user, 'employee_profile', None)
-    role = 'founder' if request.user.is_superuser else getattr(profile, 'role', 'employee')
+    perms = getattr(profile, 'permissions', None) if profile else None
 
-    if role not in ('founder', 'hr', 'supervisor'):
+    if not perms or not perms.can_approve_checklist_items:
         return HttpResponseForbidden("You do not have permission to access the verification center.")
 
-    if role == 'supervisor':
+    # Determine data scope from checklist_approve_scope
+    approve_scope = perms.checklist_approve_scope
+
+    if approve_scope == 'own_team':
         subordinate_ids = list(
             Employee.objects.filter(enterprise=request.tenant, supervisor=profile).values_list('id', flat=True)
         )
         base_qs = TaskChecklist.objects.filter(enterprise=request.tenant, assigned_to__id__in=subordinate_ids)
     else:
-        # founder / hr see the entire organization (scoped to tenant)
+        # scope == 'all' → see the entire organization (scoped to tenant)
         base_qs = TaskChecklist.objects.filter(enterprise=request.tenant)
 
     awaiting_items = (
@@ -775,13 +840,15 @@ def checklist_supervisor_view(request):
     )
 
     # Per-employee stats snapshot for the summary cards
-    if role == 'supervisor':
+    if approve_scope == 'own_team':
         team_employees = Employee.objects.filter(
             enterprise=request.tenant, supervisor=profile, is_active=True
         ).prefetch_related('stats')
     else:
         team_employees = Employee.objects.filter(enterprise=request.tenant, is_active=True).prefetch_related('stats')
 
+    # Preserve 'role' in context for template backwards-compat
+    role = getattr(profile, 'role', 'employee')
     context = {
         'awaiting_items':  awaiting_items,
         'awaiting_count':  awaiting_items.count(),
@@ -809,10 +876,10 @@ def checklist_resolve_view(request, item_id):
     from django.db import transaction
 
     profile = getattr(request.user, 'employee_profile', None)
-    role = 'founder' if request.user.is_superuser else getattr(profile, 'role', 'employee')
+    perms = getattr(profile, 'permissions', None) if profile else None
 
-    if role not in ('founder', 'hr', 'supervisor'):
-        return HttpResponseForbidden("Only supervisors or above can resolve checklist items.")
+    if not perms or not perms.can_approve_checklist_items:
+        return HttpResponseForbidden("Only employees with checklist approval permission can resolve items.")
 
     if request.method != 'POST':
         return HttpResponseForbidden("POST required.")
@@ -828,8 +895,8 @@ def checklist_resolve_view(request, item_id):
         with transaction.atomic():
             item = TaskChecklist.objects.select_for_update().get(pk=item_id, enterprise=request.tenant)
 
-            # Supervisors can only resolve items belonging to their own subordinates
-            if role == 'supervisor' and item.assigned_to.supervisor_id != profile.pk:
+            # Scope check: 'own_team' restricts to direct reports only
+            if perms.checklist_approve_scope == 'own_team' and item.assigned_to.supervisor_id != profile.pk:
                 return HttpResponseForbidden("You can only resolve items assigned to your direct reports.")
 
             if item.status != 'AWAITING_VERIFICATION':
@@ -883,8 +950,9 @@ def setup_organization_view(request):
 
     from .forms import EnterpriseForm
 
-    profile_role = getattr(request.user, 'employee_profile', None)
-    is_authorized = request.user.is_superuser or (profile_role and profile_role.role in ('founder', 'hr'))
+    profile_emp = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile_emp, 'permissions', None) if profile_emp else None
+    is_authorized = request.user.is_superuser or bool(perms and perms.can_manage_organization)
 
     tenant = getattr(request, 'tenant', None)
     if not tenant:

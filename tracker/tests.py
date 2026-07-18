@@ -4,6 +4,17 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 
 from .models import validate_document_file, validate_upload_size
+import copy
+import django.template.context
+_original_copy = copy.copy
+import django.template.context
+def _patched_context_copy(self):
+    duplicate = object.__new__(type(self))
+    duplicate.__dict__.update(self.__dict__)
+    if hasattr(self, 'dicts'):
+        duplicate.dicts = [d.copy() if hasattr(d, 'copy') else d for d in self.dicts]
+    return duplicate
+django.template.context.BaseContext.__copy__ = _patched_context_copy
 
 
 class SecurityValidationTests(TestCase):
@@ -733,8 +744,12 @@ class RoleBasedPermissionTests(TestCase):
         )
 
         # Make employee user staff as well
-        self.emp_user.is_staff = True
-        self.emp_user.save()
+        self.employee.permissions.can_access_admin_panel = True
+        self.employee.permissions.save()
+        intern.permissions.can_access_admin_panel = True
+        intern.permissions.save()
+        volunteer.permissions.can_access_admin_panel = True
+        volunteer.permissions.save()
 
         # They should be blocked from the creation view (returns 403 Forbidden because they lack Django admin add permissions)
         for user, creator in [(self.emp_user, self.employee), (intern_user, intern), (volunteer_user, volunteer)]:
@@ -1090,5 +1105,49 @@ class TaskChecklistLifecycleTests(TestCase):
             item.save()
             mock_recalc.assert_called_once_with(self.subordinate)
 
+import json
 
+class PermissionUpdateTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from tracker.models import Enterprise, Employee
+        
+        self.tenant = Enterprise.objects.create(name="Cyberdyne", subdomain="cyber")
+        
+        self.hr_user = User.objects.create_user(username="hr", password="password")
+        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, enterprise=self.tenant, role="hr", email="hr@cyberdyne.com")
+        self.hr.permissions.can_manage_employees = True
+        self.hr.permissions.save()
+        
+        self.emp_user = User.objects.create_user(username="emp", password="password")
+        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, enterprise=self.tenant, role="employee", email="emp@cyberdyne.com")
 
+    def test_hr_can_update_permissions(self):
+        self.client.login(username="hr", password="password")
+        payload = {
+            "can_manage_organization": True,
+            "checklist_assign_scope": "all"
+        }
+        response = self.client.patch(
+            f'/dashboard/employees/{self.emp.id}/permissions/',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_HOST='cyber.localhost'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.emp.permissions.refresh_from_db()
+        self.assertTrue(self.emp.permissions.can_manage_organization)
+        self.assertEqual(self.emp.permissions.checklist_assign_scope, "all")
+
+    def test_employee_cannot_update_permissions(self):
+        self.client.login(username="emp", password="password")
+        payload = {
+            "can_manage_organization": True
+        }
+        response = self.client.patch(
+            f'/dashboard/employees/{self.emp.id}/permissions/',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_HOST='cyber.localhost'
+        )
+        self.assertEqual(response.status_code, 403)
