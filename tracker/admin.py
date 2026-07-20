@@ -579,6 +579,6 @@ class EmployeeStatsAdmin(TenantBaseAdmin):
         pct = float(obj.completion_percentage)
         colour = '#2e7d32' if pct >= 75 else ('#e65100' if pct >= 40 else '#c62828')
         return format_html(
-            '<span style="color:{};font-weight:bold;">{:.1f}%</span>',
-            colour, pct,
+            '<span style="color:{};font-weight:bold;">{}%</span>',
+            colour, f"{pct:.1f}",
         )
