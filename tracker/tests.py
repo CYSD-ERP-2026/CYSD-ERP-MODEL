@@ -79,12 +79,12 @@ class DevSwitchTests(TestCase):
         from django.core.cache import cache
         cache.clear()
 
-        # The login view is rate limited to 5 requests per 60 seconds
-        for _ in range(5):
+        # The login view is rate limited to 10 requests per 60 seconds
+        for _ in range(10):
             response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
             self.assertEqual(response.status_code, 200)
 
-        # 6th request should return 429
+        # 11th request should return 429
         response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
         self.assertEqual(response.status_code, 429)
 

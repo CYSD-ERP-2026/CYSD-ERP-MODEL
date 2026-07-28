@@ -56,7 +56,7 @@ def ratelimit(key_prefix, limit, period):
     return decorator
 
 
-@method_decorator(ratelimit(key_prefix='login', limit=5, period=60), name='dispatch')
+@method_decorator(ratelimit(key_prefix='login', limit=10, period=60), name='dispatch')
 class RateLimitedLoginView(LoginView):
     pass
 @login_required
