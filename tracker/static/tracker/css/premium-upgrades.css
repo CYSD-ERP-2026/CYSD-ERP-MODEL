@@ -1,5 +1,9 @@
 /* CYSD Premium UI Upgrades */
 
+html, body, .app-shell {
+  overflow-x: hidden;
+}
+
 /* 1. Page Load Staggered Fade-In */
 @keyframes fadeUpIn {
   from {
