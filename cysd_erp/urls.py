@@ -18,7 +18,7 @@ schema_view = get_schema_view(
       contact=openapi.Contact(email="admin@cysd.org"),
    ),
    public=True,
-   permission_classes=(permissions.AllowAny,),
+   permission_classes=(permissions.IsAuthenticated,),
 )
 
 urlpatterns = [

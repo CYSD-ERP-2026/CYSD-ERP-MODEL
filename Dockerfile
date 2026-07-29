@@ -16,6 +16,12 @@ RUN pip install gunicorn
 
 COPY . /app/
 
+RUN python manage.py collectstatic --noinput
+
+RUN useradd -m appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "cysd_erp.wsgi:application"]

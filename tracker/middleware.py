@@ -22,6 +22,9 @@ class TenantMiddleware:
         if 'ngrok-free.dev' in host:
             if len(parts) > 3:
                 subdomain = parts[0]
+            else:
+                # Ngrok free tier doesn't support nested subdomains, default to 'cysd' for testing
+                subdomain = 'cysd'
         elif 'localhost' in host:
             if len(parts) > 1 and parts[-1] == 'localhost':
                 subdomain = parts[0]
@@ -64,6 +67,9 @@ class TenantMiddleware:
         # Check tenant boundaries for authenticated users
         if request.user.is_authenticated and request.tenant:
             profile = getattr(request.user, 'employee_profile', None)
+            
+            # Superusers bypass tenant boundary checks (can browse ANY tenant's data).
+            # This is by design to allow platform admin access across all tenants.
             if profile and profile.enterprise != request.tenant and not request.user.is_superuser:
                 from django.contrib import messages
                 from django.contrib.auth import logout

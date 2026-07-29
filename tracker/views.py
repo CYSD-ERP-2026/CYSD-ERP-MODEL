@@ -184,6 +184,12 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
 @login_required
 def export_meetings_csv(request):
     """Stream all meetings as a CSV download for founder reporting."""
+    profile = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile, 'permissions', None) if profile else None
+    
+    if not perms or not (perms.can_read_confidential_meetings or getattr(perms, 'can_manage_organization', False)):
+        return HttpResponseForbidden("You do not have permission to export meetings.")
+
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="meetings_export.csv"'
 
@@ -256,6 +262,7 @@ from django.shortcuts import get_object_or_404
 from .models import EmployeePermission
 
 @login_required
+@ratelimit(key_prefix='update_perms', limit=10, period=60)
 @require_http_methods(["PATCH"])
 def update_employee_permissions(request, emp_id):
     caller_profile = getattr(request.user, 'employee_profile', None)
@@ -290,6 +297,9 @@ def update_employee_permissions(request, emp_id):
         
         for field in allowed_fields:
             if field in data:
+                if field in ['checklist_assign_scope', 'checklist_approve_scope', 'analytics_scope']:
+                    if data[field] not in ['none', 'own_team', 'all']:
+                        return JsonResponse({'error': f'Invalid value for {field}.'}, status=400)
                 setattr(target_perms, field, data[field])
                 
         target_perms.save()
@@ -297,7 +307,10 @@ def update_employee_permissions(request, emp_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data.'}, status=400)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating permissions: {e}", exc_info=True)
+        return JsonResponse({'error': 'An internal server error occurred.'}, status=500)
 
 
 @login_required

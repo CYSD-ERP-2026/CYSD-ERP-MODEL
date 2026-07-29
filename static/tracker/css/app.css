@@ -133,6 +133,8 @@ code {
     radial-gradient(circle at 0 0, rgba(37, 99, 235, .28), transparent 22rem);
   border-right: 1px solid rgba(255, 255, 255, .08);
   box-shadow: var(--shadow-glass);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .sidebar-brand {

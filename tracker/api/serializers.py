@@ -25,7 +25,7 @@ class TaskSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'due_date', 'status', 'assigned_to']
+        fields = ['id', 'title', 'due_date', 'status', 'assigned_to']
 
 class TaskChecklistSerializer(serializers.ModelSerializer):
     assigned_to = EmployeeSerializer(read_only=True)
