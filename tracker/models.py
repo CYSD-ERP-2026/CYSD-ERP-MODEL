@@ -72,6 +72,7 @@ class Domain(models.Model):
     code = models.CharField(
         max_length=20,
         unique=True,
+        db_index=True,
         help_text='Short identifier code (e.g. "EDU", "HLT")',
     )
     description = models.TextField(
@@ -158,6 +159,7 @@ class Employee(models.Model):
     employee_id = models.CharField(
         max_length=30,
         unique=True,
+        db_index=True,
         help_text='Unique employee / volunteer ID (e.g. "CYSD-2024-001")',
     )
     name = models.CharField(max_length=200)
@@ -308,7 +310,7 @@ class Meeting(models.Model):
     )
 
     # Scheduling
-    date = models.DateField(help_text='Date of the meeting')
+    date = models.DateField(db_index=True, help_text='Date of the meeting')
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
     venue = models.CharField(
@@ -455,7 +457,8 @@ class Task(models.Model):
     status = models.CharField(
         max_length=20,
         choices=TASK_STATUS_CHOICES,
-        default='pending'
+        default='pending',
+        db_index=True
     )
     hours_logged = models.DecimalField(
         max_digits=6,
@@ -523,6 +526,7 @@ class TaskChecklist(models.Model):
         Employee,
         on_delete=models.CASCADE,
         related_name='checklist_items',
+        db_index=True,
         help_text='Employee this checklist item is assigned to',
     )
     created_by = models.ForeignKey(
@@ -701,6 +705,7 @@ class Enterprise(models.Model):
     subdomain = models.CharField(
         max_length=63,
         unique=True,
+        db_index=True,
         help_text='Unique subdomain for routing (e.g. "cysd")'
     )
     logo = models.ImageField(
