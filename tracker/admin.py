@@ -235,11 +235,11 @@ class EmployeeAdminForm(forms.ModelForm):
 class EmployeeAdmin(TenantBaseAdmin):
     form = EmployeeAdminForm
     list_display = (
-        'employee_id', 'name', 'role', 'supervisor', 'domain', 'designation',
+        'employee_id', 'name', 'supervisor', 'domain', 'designation',
         'employment_type', 'email', 'is_active', 'date_joined',
     )
     list_display_links = ('employee_id', 'name')
-    list_filter = ('role', 'domain', 'employment_type', 'gender', 'is_active')
+    list_filter = ('domain', 'employment_type', 'gender', 'is_active')
     search_fields = ('name', 'employee_id', 'email', 'designation', 'phone')
     list_editable = ('is_active',)
     autocomplete_fields = ('domain', 'supervisor')
@@ -249,8 +249,8 @@ class EmployeeAdmin(TenantBaseAdmin):
     readonly_fields = ('created_at', 'updated_at', 'photo_preview')
 
     fieldsets = (
-        ('User Account & Role', {
-            'fields': ('custom_username', 'custom_password', 'user', 'role', 'supervisor'),
+        ('User Account', {
+            'fields': ('custom_username', 'custom_password', 'user', 'supervisor'),
         }),
         ('Personal Details', {
             'fields': (

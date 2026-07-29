@@ -10,7 +10,6 @@ class TrackerConfig(AppConfig):
         # This must be done inside ready() to avoid circular imports at startup.
         import logging
         from django.conf import settings
-        import copy
         import django.template.context
         
         # Monkeypatch for Python 3.14 context copying issue

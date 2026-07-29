@@ -16,10 +16,6 @@ from .models import (
     Meeting,
 )
 
-# Reusable widget kwargs
-_TEXT_WIDGET = TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': ''})
-_SELECT_WIDGET = Select(attrs={'class': 'form-select form-select-sm'})
-
 
 class MeetingFilter(django_filters.FilterSet):
     """

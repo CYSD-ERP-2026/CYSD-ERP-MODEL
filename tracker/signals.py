@@ -31,66 +31,24 @@ def update_employee_stats_on_completion(sender, instance, created, **kwargs):
         with transaction.atomic():
             EmployeeStats.recalculate_for(instance.assigned_to)
 
-ROLE_PERMISSION_MAP = {
-    'founder': {
-        'can_manage_employees': True,
-        'can_manage_organization': True,
-        'can_view_advanced_analytics': True,
-        'can_assign_checklist_items': True,
-        'can_approve_checklist_items': True,
-        'can_read_confidential_meetings': True,
-        'can_log_hours': True,
-        'can_access_admin_panel': True,
-        'checklist_assign_scope': 'all',
-        'checklist_approve_scope': 'all',
-        'analytics_scope': 'all',
-    },
-    'hr': {
-        'can_manage_employees': True,
-        'can_manage_organization': True,
-        'can_view_advanced_analytics': True,
-        'can_assign_checklist_items': True,
-        'can_approve_checklist_items': True,
-        'can_read_confidential_meetings': False,
-        'can_log_hours': True,
-        'can_access_admin_panel': True,
-        'checklist_assign_scope': 'all',
-        'checklist_approve_scope': 'all',
-        'analytics_scope': 'all',
-    },
-    'supervisor': {
-        'can_manage_employees': False,
-        'can_manage_organization': False,
-        'can_view_advanced_analytics': True,
-        'can_assign_checklist_items': True,
-        'can_approve_checklist_items': True,
-        'can_read_confidential_meetings': True,
-        'can_log_hours': True,
-        'can_access_admin_panel': True,
-        'checklist_assign_scope': 'own_team',
-        'checklist_approve_scope': 'own_team',
-        'analytics_scope': 'own_team',
-    },
-    '_default': {
-        'can_manage_employees': False,
-        'can_manage_organization': False,
-        'can_view_advanced_analytics': False,
-        'can_assign_checklist_items': False,
-        'can_approve_checklist_items': False,
-        'can_read_confidential_meetings': True,
-        'can_log_hours': True,
-        'can_access_admin_panel': False,
-        'checklist_assign_scope': 'none',
-        'checklist_approve_scope': 'none',
-        'analytics_scope': 'none',
-    },
+DEFAULT_PERMISSIONS = {
+    'can_manage_employees': False,
+    'can_manage_organization': False,
+    'can_view_advanced_analytics': False,
+    'can_assign_checklist_items': False,
+    'can_approve_checklist_items': False,
+    'can_read_confidential_meetings': True,
+    'can_log_hours': True,
+    'can_access_admin_panel': False,
+    'checklist_assign_scope': 'none',
+    'checklist_approve_scope': 'none',
+    'analytics_scope': 'none',
 }
 
 @receiver(post_save, sender=Employee)
 def auto_populate_employee_permission(sender, instance, created, **kwargs):
     if not hasattr(instance, 'permissions'):
-        perm_values = ROLE_PERMISSION_MAP.get(instance.role, ROLE_PERMISSION_MAP['_default'])
-        EmployeePermission.objects.create(employee=instance, **perm_values)
+        EmployeePermission.objects.create(employee=instance, **DEFAULT_PERMISSIONS)
 
 @receiver(post_save, sender=EmployeePermission)
 def sync_user_admin_access(sender, instance, **kwargs):

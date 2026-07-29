@@ -62,13 +62,24 @@ class Command(BaseCommand):
                 "enterprise": cysd_ent,
                 "employee_id": "CYSD-ADMIN-001",
                 "name": "CYSD Admin",
-                "role": "founder",
                 "domain": cysd_domain,
                 "designation": "Executive Director",
                 "email": "cysd_admin@cysd.org",
             }
         )
         if emp_created:
+            # Grant founder permissions manually
+            perms = cysd_emp.permissions
+            perms.can_manage_employees = True
+            perms.can_manage_organization = True
+            perms.can_view_advanced_analytics = True
+            perms.can_assign_checklist_items = True
+            perms.can_approve_checklist_items = True
+            perms.can_access_admin_panel = True
+            perms.checklist_assign_scope = 'all'
+            perms.checklist_approve_scope = 'all'
+            perms.analytics_scope = 'all'
+            perms.save()
             self.stdout.write(self.style.SUCCESS("Created Employee profile for CYSD Admin"))
 
         cysd_proj, _ = Project.objects.get_or_create(
@@ -128,13 +139,24 @@ class Command(BaseCommand):
                 "enterprise": rasayam_ent,
                 "employee_id": "RAS-ADMIN-001",
                 "name": "Rasayam Admin",
-                "role": "founder",
                 "domain": rasayam_domain,
                 "designation": "Chief Operating Officer",
                 "email": "admin@rasayam.org",
             }
         )
         if emp_created:
+            # Grant founder permissions manually
+            perms = rasayam_emp.permissions
+            perms.can_manage_employees = True
+            perms.can_manage_organization = True
+            perms.can_view_advanced_analytics = True
+            perms.can_assign_checklist_items = True
+            perms.can_approve_checklist_items = True
+            perms.can_access_admin_panel = True
+            perms.checklist_assign_scope = 'all'
+            perms.checklist_approve_scope = 'all'
+            perms.analytics_scope = 'all'
+            perms.save()
             self.stdout.write(self.style.SUCCESS("Created Employee profile for Rasayam Admin"))
 
         rasayam_proj, _ = Project.objects.get_or_create(

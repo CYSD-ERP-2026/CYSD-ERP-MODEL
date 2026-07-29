@@ -1,15 +1,11 @@
 import csv
 import json
 
-import matplotlib
-
-matplotlib.use('Agg')  # Headless mode for matplotlib
 import pandas as pd
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.db import models
 from django.db.models import Count, Max, Q
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
@@ -123,7 +119,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     # Task Checklist dashboard integration
     awaiting_verification_count = 0
     personal_checklist_stats = None
-    role = 'founder' if request.user.is_superuser else getattr(profile, 'role', 'employee')
 
     # Subordinate verification counts based on checklist_approve_scope
     if profile:
@@ -181,7 +176,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         # Checklist stats
         'awaiting_verification_count': awaiting_verification_count,
         'personal_checklist_stats': personal_checklist_stats,
-        'user_role': role,
         'generated_at': timezone.now(),
     }
     return render(request, 'tracker/dashboard.html', context)
@@ -226,12 +220,11 @@ def domains_list_view(request):
     """List all domains. Active employee count resolved via annotation to avoid N+1."""
     domains = (
         Domain.objects.filter(enterprise=request.tenant)
-        .annotate(emp_count=Count('employees', filter=models.Q(employees__is_active=True)))
+        .annotate(emp_count=Count('employees', filter=Q(employees__is_active=True)))
         .order_by('name')
     )
     context = {
         'domains': domains,
-        'generated_at': timezone.now(),
     }
     return render(request, 'domains.html', context)
 
@@ -254,7 +247,6 @@ def employees_list_view(request):
         'filter': employee_filter,
         'employees': employee_filter.qs,
         'can_manage_employees': getattr(perms, 'can_manage_employees', False) if perms else False,
-        'generated_at': timezone.now(),
     }
     return render(request, 'employees.html', context)
 
@@ -335,7 +327,6 @@ def meetings_list_view(request):
     context = {
         'filter': meeting_filter,
         'meetings': meetings,
-        'generated_at': timezone.now(),
     }
     return render(request, 'meetings.html', context)
 
@@ -408,7 +399,6 @@ def policy_analytics_view(request: HttpRequest) -> HttpResponse:
     context = {
         'chart_data_json': chart_data_json,
         'crosstab_html': crosstab_html,
-        'generated_at': timezone.now(),
     }
 
     cache.set(cache_key, context, CACHE_TTL_SECONDS)
@@ -462,8 +452,6 @@ def employee_performance_view(request: HttpRequest) -> HttpResponse:
         employees_base_qs = Employee.objects.filter(enterprise=request.tenant, id__in=allowed_ids, is_active=True)
 
     # 1. Workload Chart: Active tasks per employee
-    from django.db.models import Count
-
     # Run aggregation for workload chart counts
     emp_workloads = (
         employees_base_qs
@@ -545,7 +533,6 @@ def employee_performance_view(request: HttpRequest) -> HttpResponse:
         'has_efficiency_data': (completed_count + overdue_count) > 0,
         'efficiency_percentage': round(efficiency_percentage, 1),
         'employees_data': employees_data,
-        'generated_at': timezone.now(),
     }
 
     cache.set(cache_key, context, CACHE_TTL_SECONDS)
@@ -629,15 +616,11 @@ def dev_role_switch_view(request, role_name):
             employee_id=f"DEV-{user.username.upper()}-{rand_suffix}"[:30],
             name=user.username.title(),
             email=user.email or f"{user.username}_{rand_suffix}@cysd.org",
-            role=role_name.lower(),
             designation="Dev Masquerade Profile",
             is_active=True,
         )
     else:
         profile = user.employee_profile
-        if profile.role != role_name.lower():
-            profile.role = role_name.lower()
-            profile.save()
 
     # Django's login() requires a backend attribute when called outside of
     # the standard authenticate() flow – set it explicitly.

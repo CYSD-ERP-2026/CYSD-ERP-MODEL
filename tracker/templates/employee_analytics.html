@@ -112,7 +112,7 @@
             {% endif %}
           </td>
           <td data-label="Actions">
-            {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
+            {% if request.user.is_superuser or request.user.employee_profile.permissions.can_assign_checklist_items %}
             <a href="/admin/tracker/task/add/?assigned_to={{ data.employee.id }}" class="btn btn-sm btn-outline-primary" style="font-size: .8rem;">
               <i class="bi bi-plus-lg"></i> Assign Task
             </a>

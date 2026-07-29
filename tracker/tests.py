@@ -4,17 +4,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 
 from .models import validate_document_file, validate_upload_size
-import copy
-import django.template.context
-_original_copy = copy.copy
-import django.template.context
-def _patched_context_copy(self):
-    duplicate = object.__new__(type(self))
-    duplicate.__dict__.update(self.__dict__)
-    if hasattr(self, 'dicts'):
-        duplicate.dicts = [d.copy() if hasattr(d, 'copy') else d for d in self.dicts]
-    return duplicate
-django.template.context.BaseContext.__copy__ = _patched_context_copy
 
 
 class SecurityValidationTests(TestCase):
@@ -73,7 +62,6 @@ class DevSwitchTests(TestCase):
         # Verify Employee profile was created with the correct tenant
         employee = Employee.objects.get(user=self.user)
         self.assertEqual(employee.enterprise, self.enterprise)
-        self.assertEqual(employee.role, 'founder')
 
     def test_login_rate_limiting(self):
         from django.core.cache import cache
@@ -122,7 +110,6 @@ class MultiTenantDataIsolationTests(TestCase):
             employee_id="EMP-A",
             email="a@tenant.com",
             designation="Manager",
-            role="founder",
             enterprise=self.tenant_a,
             domain=self.domain_a,
         )
@@ -134,10 +121,16 @@ class MultiTenantDataIsolationTests(TestCase):
             employee_id="EMP-B",
             email="b@tenant.com",
             designation="Manager",
-            role="founder",
             enterprise=self.tenant_b,
             domain=self.domain_b,
         )
+
+        self.employee_a.permissions.can_assign_checklist_items = True
+        self.employee_a.permissions.checklist_assign_scope = "all"
+        self.employee_a.permissions.save()
+        self.employee_b.permissions.can_assign_checklist_items = True
+        self.employee_b.permissions.checklist_assign_scope = "all"
+        self.employee_b.permissions.save()
 
         # 4. Create Meetings
         self.meeting_a = Meeting.objects.create(
@@ -252,16 +245,17 @@ class MultiTenantDataIsolationTests(TestCase):
         )
         founder_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
         founder_user.save()
-        Employee.objects.create(
+        founder_emp = Employee.objects.create(
             user=founder_user,
             name='Founder Admin A',
             employee_id='EMP-A-ADMIN',
             email='founder-admin-a@tenant.com',
             designation='Founder',
-            role='founder',
             enterprise=self.tenant_a,
             domain=self.domain_a,
         )
+        founder_emp.permissions.can_access_admin_panel = True
+        founder_emp.permissions.save()
 
         # Create complete set of objects for Tenant A
         project_a = Project.objects.create(
@@ -507,7 +501,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Supervisor",
             employee_id="EMP-SUP",
             email="sup@cysd.com",
-            role="supervisor",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -519,7 +512,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Subordinate",
             employee_id="EMP-SUB",
             email="sub@cysd.com",
-            role="employee",
             supervisor=self.supervisor,
             enterprise=self.tenant,
             domain=self.domain,
@@ -532,7 +524,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Non Subordinate",
             employee_id="EMP-OTHER",
             email="other@cysd.com",
-            role="employee",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -544,7 +535,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Founder",
             employee_id="EMP-FND",
             email="fnd@cysd.com",
-            role="founder",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -556,7 +546,6 @@ class RoleBasedPermissionTests(TestCase):
             name="HR",
             employee_id="EMP-HR",
             email="hr@cysd.com",
-            role="hr",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -568,7 +557,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Employee",
             employee_id="EMP-REG",
             email="reg@cysd.com",
-            role="employee",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -578,6 +566,34 @@ class RoleBasedPermissionTests(TestCase):
         self.super_user.user_permissions.add(*tracker_perms)
         self.founder_user.user_permissions.add(*tracker_perms)
         self.hr_user.user_permissions.add(*tracker_perms)
+
+        # Set permissions manually now that role field is gone
+        super_perms = self.supervisor.permissions
+        super_perms.can_assign_checklist_items = True
+        super_perms.can_approve_checklist_items = True
+        super_perms.can_access_admin_panel = True
+        super_perms.checklist_assign_scope = "own_team"
+        super_perms.checklist_approve_scope = "own_team"
+        super_perms.save()
+
+        founder_perms = self.founder.permissions
+        founder_perms.can_assign_checklist_items = True
+        founder_perms.can_approve_checklist_items = True
+        founder_perms.can_read_confidential_meetings = True
+        founder_perms.can_access_admin_panel = True
+        founder_perms.checklist_assign_scope = "all"
+        founder_perms.checklist_approve_scope = "all"
+        founder_perms.save()
+
+        hr_perms = self.hr.permissions
+        hr_perms.can_assign_checklist_items = True
+        hr_perms.can_approve_checklist_items = True
+        hr_perms.can_read_confidential_meetings = False
+        hr_perms.can_access_admin_panel = True
+        hr_perms.checklist_assign_scope = "all"
+        hr_perms.checklist_approve_scope = "all"
+        hr_perms.save()
+
 
     @override_settings(STORAGES={
         'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
@@ -727,7 +743,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Intern",
             employee_id="EMP-INT",
             email="intern@cysd.com",
-            role="intern",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -738,7 +753,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Volunteer",
             employee_id="EMP-VOL",
             email="vol@cysd.com",
-            role="volunteer",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -856,7 +870,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Supervisor B",
             employee_id="EMP-SUP-B",
             email="sup_b@cysd.com",
-            role="supervisor",
             enterprise=self.tenant,
             domain=self.domain,
         )
@@ -918,23 +931,26 @@ class TaskChecklistLifecycleTests(TestCase):
             name="Supervisor",
             employee_id="EMP-SUP",
             email="sup@cysd.com",
-            role="supervisor",
             enterprise=self.tenant,
             domain=self.domain,
         )
 
-        # Subordinate (Direct Report)
         self.sub_user = User.objects.create_user(username="sub_u", password="password123")
         self.subordinate = Employee.objects.create(
             user=self.sub_user,
             name="Subordinate",
             employee_id="EMP-SUB",
             email="sub@cysd.com",
-            role="employee",
             supervisor=self.supervisor,
             enterprise=self.tenant,
             domain=self.domain,
         )
+
+        self.supervisor.permissions.can_assign_checklist_items = True
+        self.supervisor.permissions.can_approve_checklist_items = True
+        self.supervisor.permissions.checklist_assign_scope = "own_team"
+        self.supervisor.permissions.checklist_approve_scope = "own_team"
+        self.supervisor.permissions.save()
 
     def test_checklist_initial_state(self):
         from tracker.models import TaskChecklist
@@ -1115,12 +1131,12 @@ class PermissionUpdateTests(TestCase):
         self.tenant = Enterprise.objects.create(name="Cyberdyne", subdomain="cyber")
         
         self.hr_user = User.objects.create_user(username="hr", password="password")
-        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, enterprise=self.tenant, role="hr", email="hr@cyberdyne.com")
+        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, enterprise=self.tenant, email="hr@cyberdyne.com")
         self.hr.permissions.can_manage_employees = True
         self.hr.permissions.save()
         
         self.emp_user = User.objects.create_user(username="emp", password="password")
-        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, enterprise=self.tenant, role="employee", email="emp@cyberdyne.com")
+        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, enterprise=self.tenant, email="emp@cyberdyne.com")
 
     def test_hr_can_update_permissions(self):
         self.client.login(username="hr", password="password")

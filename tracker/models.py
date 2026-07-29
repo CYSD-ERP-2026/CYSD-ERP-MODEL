@@ -123,15 +123,6 @@ EMPLOYMENT_TYPE_CHOICES = [
 ]
 
 
-ROLE_CHOICES = [
-    ('founder', 'Founder'),
-    ('hr', 'HR'),
-    ('supervisor', 'Supervisor'),
-    ('employee', 'Employee'),
-    ('intern', 'Intern'),
-    ('volunteer', 'Volunteer'),
-]
-
 
 class Employee(models.Model):
     """
@@ -154,20 +145,7 @@ class Employee(models.Model):
         related_name='employee_profile',
         help_text="Django user account linked to this employee profile"
     )
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='employee',
-        help_text="Role-Based Access Control level",
-    )
-    role_tag = models.ForeignKey(
-        'Role',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='employees',
-        help_text='Tenant-scoped role tag (replaces legacy role string when set)',
-    )
+
     supervisor = models.ForeignKey(
         'self',
         null=True,
@@ -810,10 +788,7 @@ class EmployeePermission(models.Model):
         default=False,
         help_text='Grants is_staff + tracker app permissions on the linked User',
     )
-    can_manage_roles = models.BooleanField(
-        default=False,
-        help_text='Can create / edit / delete Role tags for the enterprise',
-    )
+
 
     # ── Scope fields (3) ──
     checklist_assign_scope = models.CharField(
@@ -846,59 +821,4 @@ class EmployeePermission(models.Model):
         return f'Permissions for {self.employee.name}'
 
 
-# ---------------------------------------------------------------------------
-# Role – tenant-scoped permission tag
-# ---------------------------------------------------------------------------
 
-class Role(models.Model):
-    """Tenant-scoped role tag that defines a set of permission flags.
-
-    The original hard‑coded roles are seeded as system defaults so existing
-    behavior is unchanged until migration.
-    """
-    enterprise = models.ForeignKey(
-        'Enterprise',
-        on_delete=models.CASCADE,
-        related_name='roles',
-        null=False,
-    )
-    name = models.CharField(max_length=50, help_text='Name of the role tag')
-    description = models.TextField(blank=True, help_text='Optional description of the role')
-    # Boolean flags – same as EmployeePermission
-    can_manage_employees = models.BooleanField(default=False)
-    can_manage_organization = models.BooleanField(default=False)
-    can_view_advanced_analytics = models.BooleanField(default=False)
-    can_assign_checklist_items = models.BooleanField(default=False)
-    can_approve_checklist_items = models.BooleanField(default=False)
-    can_read_confidential_meetings = models.BooleanField(default=False)
-    can_log_hours = models.BooleanField(default=False)
-    can_access_admin_panel = models.BooleanField(default=False)
-    can_manage_roles = models.BooleanField(default=False)
-    # Scope fields – same as EmployeePermission
-    checklist_assign_scope = models.CharField(
-        max_length=10,
-        choices=PERMISSION_SCOPE_CHOICES,
-        default='none',
-    )
-    checklist_approve_scope = models.CharField(
-        max_length=10,
-        choices=PERMISSION_SCOPE_CHOICES,
-        default='none',
-    )
-    analytics_scope = models.CharField(
-        max_length=10,
-        choices=PERMISSION_SCOPE_CHOICES,
-        default='none',
-    )
-    is_system_default = models.BooleanField(
-        default=False,
-        help_text='Marks the original seeded roles; editable but flagged for warnings before deletion',
-    )
-
-    class Meta:
-        unique_together = ('enterprise', 'name')
-        verbose_name = 'Role'
-        verbose_name_plural = 'Roles'
-
-    def __str__(self):
-        return f"{self.name} (Enterprise: {self.enterprise.name})"

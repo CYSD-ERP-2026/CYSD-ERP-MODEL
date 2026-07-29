@@ -203,7 +203,7 @@
         {% else %}Recent Meetings
         {% endif %}
       </h6>
-      {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' or request.user.employee_profile.role == 'supervisor' %}
+      {% if request.user.is_superuser or request.user.employee_profile.permissions.can_access_admin_panel %}
       <a href="/admin/tracker/meeting/add/" class="btn btn-sm btn-outline-primary" style="font-size:.8rem;">
         <i class="bi bi-plus-lg"></i> Add Meeting
       </a>
@@ -244,7 +244,7 @@
                 No meetings found involving you or your team members.
               {% else %}
                 No meetings recorded yet.
-                {% if request.user.is_superuser or request.user.employee_profile.role == 'founder' %}
+                {% if request.user.is_superuser or request.user.employee_profile.permissions.can_access_admin_panel %}
                 <a href="/admin/tracker/meeting/add/">Add the first one.</a>
                 {% endif %}
               {% endif %}
