@@ -198,4 +198,59 @@
     </table>
   </div>
 </div>
+
+<!-- Meetings This Week -->
+<div class="table-card mt-4 mb-4">
+  <div class="table-header">
+    <h6><i class="bi bi-calendar-week me-1"></i> Meetings This Week</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Meeting Title</th>
+          <th>Domain / Scale</th>
+          <th>Date & Time</th>
+          <th>Type / Venue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in meetings_this_week %}
+        <tr>
+          <td data-label="Meeting Title">
+            <div class="fw-semibold text-dark">{{ m.title }}</div>
+            {% if m.agenda %}
+              <div class="text-muted small mt-1 text-truncate" style="max-width: 250px;">{{ m.agenda }}</div>
+            {% endif %}
+          </td>
+          <td data-label="Domain / Scale">
+            <span class="badge bg-light text-dark border">{{ m.domain.name|default:"General" }}</span>
+            <small class="d-block text-muted mt-1">{{ m.get_intervention_scale_display }}</small>
+          </td>
+          <td data-label="Date & Time">
+            <div class="fw-medium text-dark">{{ m.date|date:"l, d M" }}</div>
+            {% if m.start_time %}
+              <small class="text-muted">{{ m.start_time|time:"H:i" }}</small>
+            {% endif %}
+          </td>
+          <td data-label="Type / Venue">
+            <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2">{{ m.get_meeting_type_display }}</span>
+            {% if m.venue %}
+              <div class="text-muted small mt-1"><i class="bi bi-geo-alt me-1"></i>{{ m.venue }}</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="text-center text-muted py-4">
+            <i class="bi bi-calendar2-x fs-2 d-block text-secondary mb-2"></i>
+            No meetings scheduled for you this week.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
 {% endblock %}

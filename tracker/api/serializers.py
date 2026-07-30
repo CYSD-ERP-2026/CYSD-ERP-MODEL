@@ -1,17 +1,11 @@
 from rest_framework import serializers
-from tracker.models import Enterprise, Employee, Meeting, Task, TaskChecklist
-
-class EnterpriseSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Enterprise
-        fields = ['id', 'name', 'subdomain']
+from tracker.models import Employee, Meeting, Task, TaskChecklist
 
 class EmployeeSerializer(serializers.ModelSerializer):
-    enterprise = EnterpriseSerializer(read_only=True)
     
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'employee_id', 'designation', 'email', 'enterprise', 'profile_photo']
+        fields = ['id', 'name', 'employee_id', 'designation', 'email', 'profile_photo']
 
 class MeetingSerializer(serializers.ModelSerializer):
     attendees = EmployeeSerializer(many=True, read_only=True)

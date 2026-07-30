@@ -36,6 +36,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      margin: 0;
+      overflow-x: hidden;
+      padding: 1rem;
     }
 
     .login-card {
@@ -48,6 +51,7 @@
       width: 100%;
       padding: 2.5rem;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      overflow-wrap: anywhere;
     }
 
     .login-card:hover {
@@ -102,6 +106,53 @@
     .form-control:focus {
       border-color: var(--cysd-teal);
       box-shadow: 0 0 0 0.25rem rgba(10, 126, 140, 0.15);
+    }
+
+    .form-control,
+    .btn {
+      min-height: 44px;
+    }
+
+    @media (max-width: 575.98px) {
+      body {
+        align-items: flex-start;
+        padding: 1rem .75rem;
+      }
+
+      .login-card {
+        margin-top: 1.25rem;
+        padding: 1.35rem;
+        border-radius: 12px;
+      }
+
+      .login-card:hover {
+        transform: none;
+      }
+
+      .brand-header {
+        margin-bottom: 1.35rem;
+      }
+
+      .brand-logo {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        font-size: 1.55rem;
+        margin-bottom: .8rem;
+      }
+
+      .brand-title {
+        font-size: 1.08rem;
+        line-height: 1.25;
+      }
+
+      .brand-subtitle {
+        font-size: .78rem;
+      }
+
+      .btn-login {
+        padding: .68rem;
+      }
     }
   </style>
 </head>

@@ -22,9 +22,7 @@ class TenantFilteredViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if hasattr(self.request, 'tenant') and self.request.tenant:
-            return self.queryset.filter(enterprise=self.request.tenant)
-        return self.queryset.none()
+        return self.queryset
 
 
 class TenantReadOnlyViewSet(
@@ -36,9 +34,7 @@ class TenantReadOnlyViewSet(
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if hasattr(self.request, 'tenant') and self.request.tenant:
-            return self.queryset.filter(enterprise=self.request.tenant)
-        return self.queryset.none()
+        return self.queryset
 
 
 class EmployeeViewSet(TenantReadOnlyViewSet):

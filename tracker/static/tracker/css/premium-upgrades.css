@@ -106,3 +106,28 @@ html, body, .app-shell {
   transform: scale(1.08) rotate(-5deg);
   box-shadow: 0 12px 30px rgba(8, 145, 178, 0.4);
 }
+
+@media (max-width: 767.98px), (hover: none), (prefers-reduced-motion: reduce) {
+  .premium-card,
+  .stat-card,
+  .chart-card,
+  .table-card,
+  .main > .topbar,
+  .main > .row > div:nth-child(1),
+  .main > .row > div:nth-child(2),
+  .main > .row > div:nth-child(3),
+  .main > .row > div:nth-child(4) {
+    animation: none;
+    opacity: 1;
+  }
+
+  .premium-card:hover,
+  .stat-card:hover,
+  .chart-card:hover,
+  .table-card:hover,
+  .btn-primary:hover,
+  .stat-card:hover .stat-icon,
+  .sidebar-brand:hover .brand-mark {
+    transform: none;
+  }
+}

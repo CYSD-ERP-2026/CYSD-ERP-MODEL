@@ -22,10 +22,10 @@
        style="border-color:#cbd5e1;">
       <i class="bi bi-download me-1"></i> Export CSV
     </a>
-    {% if request.user.is_superuser or request.user.employee_profile.permissions.can_access_admin_panel %}
-    <a href="{% url 'admin:tracker_meeting_add' %}" class="btn btn-export">
+    {% if can_create_meeting %}
+    <button type="button" class="btn btn-export" data-bs-toggle="modal" data-bs-target="#addMeetingModal">
       <i class="bi bi-calendar-plus me-1"></i> Add Meeting
-    </a>
+    </button>
     {% endif %}
   </div>
 </div>
@@ -366,4 +366,104 @@
   </div>
 </div>
 {% endfor %}
+{% if can_create_meeting %}
+<!-- ── Add Meeting Modal ── -->
+<div class="modal fade" id="addMeetingModal" tabindex="-1" aria-labelledby="addMeetingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white border-bottom-0">
+        <h5 class="modal-title fw-bold" id="addMeetingModalLabel">
+          <i class="bi bi-calendar-plus me-2"></i>Schedule New Meeting
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="addMeetingForm" method="post" action="{% url 'tracker:meeting_create' %}">
+          {% csrf_token %}
+          
+          <div class="row g-3">
+            <div class="col-12">
+              <label for="meetingTitle" class="form-label fw-semibold text-secondary">Meeting Title <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="meetingTitle" name="title" required>
+            </div>
+            
+            <div class="col-md-6">
+              <label for="meetingDomain" class="form-label fw-semibold text-secondary">Domain</label>
+              <select class="form-select" id="meetingDomain" name="domain">
+                <option value="">-- No specific domain --</option>
+                {% for d in domains %}
+                  <option value="{{ d.id }}">{{ d.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            
+            <div class="col-md-6">
+              <label for="meetingScale" class="form-label fw-semibold text-secondary">Intervention Scale</label>
+              <select class="form-select" id="meetingScale" name="intervention_scale">
+                <option value="state">State Level</option>
+                <option value="district">District Level</option>
+                <option value="block">Block Level</option>
+                <option value="gram_panchayat">Gram Panchayat Level</option>
+                <option value="community" selected>Community / Village Level</option>
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label for="meetingDate" class="form-label fw-semibold text-secondary">Date <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="meetingDate" name="date" required>
+            </div>
+            
+            <div class="col-md-4">
+              <label for="meetingStart" class="form-label fw-semibold text-secondary">Start Time</label>
+              <input type="time" class="form-control" id="meetingStart" name="start_time">
+            </div>
+            
+            <div class="col-md-4">
+              <label for="meetingEnd" class="form-label fw-semibold text-secondary">End Time</label>
+              <input type="time" class="form-control" id="meetingEnd" name="end_time">
+            </div>
+
+            <div class="col-md-6">
+              <label for="meetingType" class="form-label fw-semibold text-secondary">Meeting Type</label>
+              <select class="form-select" id="meetingType" name="meeting_type">
+                <option value="internal" selected>Internal Review</option>
+                <option value="external">External Stakeholder</option>
+                <option value="community">Community Interface</option>
+                <option value="training">Training / Workshop</option>
+                <option value="board">Board / Governance</option>
+              </select>
+            </div>
+            
+            <div class="col-md-6">
+              <label for="meetingVenue" class="form-label fw-semibold text-secondary">Venue / Link</label>
+              <input type="text" class="form-control" id="meetingVenue" name="venue" placeholder="Office, Zoom link, etc.">
+            </div>
+
+            <div class="col-12">
+              <label for="meetingAgenda" class="form-label fw-semibold text-secondary">Agenda / Objectives</label>
+              <textarea class="form-control" id="meetingAgenda" name="agenda" rows="3" placeholder="What will be discussed?"></textarea>
+            </div>
+
+            <div class="col-12">
+              <label for="meetingAttendees" class="form-label fw-semibold text-secondary">Attendees</label>
+              <select class="form-select" id="meetingAttendees" name="attendees" multiple style="height: 120px;">
+                {% for emp in all_employees %}
+                  <option value="{{ emp.id }}">{{ emp.name }} ({{ emp.designation }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
+            </div>
+          </div>
+          
+          <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+            <button type="button" class="btn btn-light fw-semibold border" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary fw-semibold px-4">Schedule Meeting</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

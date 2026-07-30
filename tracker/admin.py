@@ -22,105 +22,16 @@ from unfold.admin import ModelAdmin, TabularInline
 from .models import (
     Domain,
     Employee,
+    EmployeePermission,
     EmployeeStats,
-    Enterprise,
+
     Meeting,
     Project,
     Task,
     TaskChecklist,
 )
 
-# ===========================================================================
-# Enterprise Admin
-# ===========================================================================
 
-@admin.register(Enterprise)
-class EnterpriseAdmin(ModelAdmin):
-    list_display = ('name', 'subdomain', 'created_at', 'updated_at')
-    search_fields = ('name', 'subdomain')
-    readonly_fields = ('created_at', 'updated_at')
-
-
-class TenantBaseAdmin(ModelAdmin):
-    """
-    Base Admin class that enforces tenant isolation in Django Admin.
-    Filters list querysets, saves records to request.tenant, and filters dropdowns.
-    """
-    def _get_employee_profile(self, user):
-        if not user or not getattr(user, 'is_authenticated', False):
-            return None
-
-        try:
-            return user.employee_profile
-        except ObjectDoesNotExist:
-            return None
-
-    def _is_platform_ops_user(self, request):
-        user = getattr(request, 'user', None)
-        return bool(
-            user and user.is_authenticated and user.is_superuser and
-            self._get_employee_profile(user) is None
-        )
-
-    def _get_effective_tenant(self, request):
-        tenant = getattr(request, 'tenant', None)
-        if tenant is not None:
-            return tenant
-
-        user = getattr(request, 'user', None)
-        profile = self._get_employee_profile(user)
-        if profile is not None:
-            return profile.enterprise
-
-        return None
-
-    def _filter_queryset_for_tenant(self, request, qs):
-        if self._is_platform_ops_user(request):
-            return qs
-
-        tenant = self._get_effective_tenant(request)
-        if tenant is None:
-            return qs.none()
-
-        if hasattr(qs.model, 'enterprise'):
-            return qs.filter(enterprise=tenant)
-        if hasattr(qs.model, 'employee'):
-            return qs.filter(employee__enterprise=tenant)
-        return qs
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return self._filter_queryset_for_tenant(request, qs)
-
-    def save_model(self, request, obj, form, change):
-        if not self._is_platform_ops_user(request):
-            tenant = self._get_effective_tenant(request)
-            if tenant is None:
-                from django.core.exceptions import PermissionDenied
-                raise PermissionDenied("You do not belong to any tenant / enterprise.")
-            if hasattr(obj.__class__, 'enterprise'):
-                obj.enterprise = tenant
-        super().save_model(request, obj, form, change)
-
-    def get_readonly_fields(self, request, obj=None):
-        readonly = super().get_readonly_fields(request, obj) or ()
-        if not self._is_platform_ops_user(request) and hasattr(self.model, 'enterprise') and 'enterprise' not in readonly:
-            return list(readonly) + ['enterprise']
-        return readonly
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        related_model = db_field.related_model
-        if hasattr(related_model, 'enterprise') or hasattr(related_model, 'employee'):
-            qs = kwargs.get("queryset", related_model.objects.all())
-            kwargs["queryset"] = self._filter_queryset_for_tenant(request, qs)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def formfield_for_manytomany(self, db_field, request, **kwargs):
-        related_model = db_field.related_model
-        if hasattr(related_model, 'enterprise') or hasattr(related_model, 'employee'):
-            qs = kwargs.get("queryset", related_model.objects.all())
-            kwargs["queryset"] = self._filter_queryset_for_tenant(request, qs)
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 # ===========================================================================
@@ -128,7 +39,7 @@ class TenantBaseAdmin(ModelAdmin):
 # ===========================================================================
 
 @admin.register(Domain)
-class DomainAdmin(TenantBaseAdmin):
+class DomainAdmin(ModelAdmin):
     list_display = ('name', 'code', 'lead', 'active_employee_count_display', 'is_active', 'created_at')
     list_display_links = ('name',)
     list_filter = ('is_active',)
@@ -231,9 +142,49 @@ class EmployeeAdminForm(forms.ModelForm):
         return employee
 
 
+# ---------------------------------------------------------------------------
+# EmployeePermission Inline
+# ---------------------------------------------------------------------------
+
+class EmployeePermissionInline(TabularInline):
+    """
+    Inline that surfaces all EmployeePermission fields directly inside the
+    Employee change page in the admin.  This is the single canonical place
+    to manage per-employee access controls — the frontend ERP modal no
+    longer exposes a permissions form.
+    """
+    model = EmployeePermission
+    can_delete = False
+    verbose_name = "Permissions"
+    verbose_name_plural = "Access Permissions"
+    extra = 0  # row is auto-created by signal; no blank extra rows needed
+
+    # Show every field so admins have full visibility in one place
+    fields = (
+        # Boolean flags
+        'can_manage_employees',
+        'can_manage_organization',
+        'can_view_advanced_analytics',
+        'can_assign_checklist_items',
+        'can_approve_checklist_items',
+        'can_read_confidential_meetings',
+        'can_log_hours',
+        'can_access_admin_panel',
+        # Scope selectors
+        'checklist_assign_scope',
+        'checklist_approve_scope',
+        'analytics_scope',
+    )
+
+    def has_add_permission(self, request, obj=None):
+        # The row is created automatically by signal; manual add not needed
+        return False
+
+
 @admin.register(Employee)
-class EmployeeAdmin(TenantBaseAdmin):
+class EmployeeAdmin(ModelAdmin):
     form = EmployeeAdminForm
+    inlines = [EmployeePermissionInline]
     list_display = (
         'employee_id', 'name', 'supervisor', 'domain', 'designation',
         'employment_type', 'email', 'is_active', 'date_joined',
@@ -318,7 +269,7 @@ class MeetingAttendeeInline(TabularInline):
 
 
 @admin.register(Meeting)
-class MeetingAdmin(TenantBaseAdmin):
+class MeetingAdmin(ModelAdmin):
     list_display = (
         'title', 'domain', 'meeting_type', 'status_badge',
         'date', 'start_time', 'venue', 'attendee_count_display', 'organised_by',
@@ -389,7 +340,7 @@ class MeetingAdmin(TenantBaseAdmin):
 # ===========================================================================
 
 @admin.register(Project)
-class ProjectAdmin(TenantBaseAdmin):
+class ProjectAdmin(ModelAdmin):
     list_display = ('title', 'domain', 'start_date', 'deadline', 'status_badge', 'lead_employee')
     list_filter = ('status', 'domain', 'start_date', 'deadline')
     search_fields = ('title', 'domain__name', 'lead_employee__name')
@@ -432,7 +383,7 @@ class ProjectAdmin(TenantBaseAdmin):
 # ===========================================================================
 
 @admin.register(Task)
-class TaskAdmin(TenantBaseAdmin):
+class TaskAdmin(ModelAdmin):
     list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge', 'hours_logged')
     list_filter = ('status', 'project', 'assigned_to', 'due_date')
     search_fields = ('title', 'project__title', 'assigned_to__name')
@@ -480,7 +431,7 @@ class TaskAdmin(TenantBaseAdmin):
 # ===========================================================================
 
 @admin.register(TaskChecklist)
-class TaskChecklistAdmin(TenantBaseAdmin):
+class TaskChecklistAdmin(ModelAdmin):
     list_display = (
         'title', 'assigned_to', 'created_by', 'status_badge',
         'submitted_at', 'resolved_at', 'created_at',
@@ -494,10 +445,11 @@ class TaskChecklistAdmin(TenantBaseAdmin):
     def has_add_permission(self, request):
         if not super().has_add_permission(request):
             return False
-        if self._is_platform_ops_user(request):
+        if request.user.is_superuser:
             return True
-        profile = self._get_employee_profile(request.user)
+        profile = getattr(request.user, 'employee_profile', None)
         return bool(profile and hasattr(profile, 'permissions') and profile.permissions.can_assign_checklist_items)
+
 
     fieldsets = (
         ('Task Details', {
@@ -556,7 +508,7 @@ class TaskChecklistAdmin(TenantBaseAdmin):
 # ===========================================================================
 
 @admin.register(EmployeeStats)
-class EmployeeStatsAdmin(TenantBaseAdmin):
+class EmployeeStatsAdmin(ModelAdmin):
     list_display = (
         'employee', 'total_assigned', 'total_completed',
         'total_awaiting', 'total_pending',

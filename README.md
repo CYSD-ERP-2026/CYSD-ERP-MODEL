@@ -140,10 +140,9 @@ pip install -r requirements-dev.txt
    ```bash
    copy .env.example .env
    ```
-3. Run migrations and seed command:
+3. Run migrations:
    ```bash
    py manage.py migrate
-   py manage.py setup_test_tenants
    ```
 
 ### 5. Running Server

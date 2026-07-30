@@ -47,7 +47,20 @@ DEFAULT_PERMISSIONS = {
 
 @receiver(post_save, sender=Employee)
 def auto_populate_employee_permission(sender, instance, created, **kwargs):
-    if not hasattr(instance, 'permissions'):
+    """
+    Create a default EmployeePermission row whenever a new Employee is saved
+    and one does not already exist.
+
+    BUG FIX: hasattr(instance, 'permissions') always returns True on a saved
+    Employee because Django's ORM reverse OneToOne descriptor returns a
+    RelatedObjectDoesNotExist exception lazily — hasattr catches it and returns
+    False only on *attribute access*, not on the presence of the descriptor.
+    In practice the descriptor IS present even when the row doesn't exist,
+    so hasattr was returning True and the permission row was never created.
+
+    Correct approach: use filter().exists() which hits the database properly.
+    """
+    if not EmployeePermission.objects.filter(employee=instance).exists():
         EmployeePermission.objects.create(employee=instance, **DEFAULT_PERMISSIONS)
 
 @receiver(post_save, sender=EmployeePermission)

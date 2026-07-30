@@ -60,7 +60,7 @@ class MeetingFilter(django_filters.FilterSet):
         request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
         if request and hasattr(request, 'tenant'):
-            qs = Domain.objects.filter(enterprise=request.tenant, is_active=True).order_by('name')
+            qs = Domain.objects.filter(is_active=True).order_by('name')
             self.filters['domain'].queryset = qs
             if 'domain' in self.form.fields:
                 self.form.fields['domain'].queryset = qs
@@ -102,7 +102,7 @@ class EmployeeFilter(django_filters.FilterSet):
         request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
         if request and hasattr(request, 'tenant'):
-            qs = Domain.objects.filter(enterprise=request.tenant, is_active=True).order_by('name')
+            qs = Domain.objects.filter(is_active=True).order_by('name')
             self.filters['domain'].queryset = qs
             if 'domain' in self.form.fields:
                 self.form.fields['domain'].queryset = qs

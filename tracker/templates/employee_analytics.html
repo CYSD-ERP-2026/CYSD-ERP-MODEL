@@ -2,16 +2,85 @@
 {% block title %}Employee Analytics{% endblock %}
 
 {% block content %}
-<!-- Top bar -->
+<!-- ── Page Header ─────────────────────────────────────────────────── -->
 <div class="topbar">
   <div>
     <h4><i class="bi bi-people-fill me-2"></i>Employee Workload &amp; Performance</h4>
-    <span class="meta">Monitor staff workload levels, deadlines, and task completion efficiency</span>
+    <span class="meta">Monitor staff workload levels, checklist completion, and task delivery efficiency</span>
   </div>
 </div>
 
-<!-- Graphs row -->
+<!-- ── KPI Summary Cards ───────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-xl-3">
+    <div class="stat-card premium-card">
+      <div class="stat-icon" style="background:#dbeafe;">
+        <i class="bi bi-people-fill" style="color:#1d4ed8;"></i>
+      </div>
+      <div>
+        <div class="value" style="color:#1d4ed8;">{{ total_employees_count }}</div>
+        <div class="label">Active Employees</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="stat-card premium-card">
+      <div class="stat-icon" style="background:#d1fae5;">
+        <i class="bi bi-card-checklist" style="color:#059669;"></i>
+      </div>
+      <div>
+        <div class="value" style="color:#059669;">{{ overall_checklist_pct }}%</div>
+        <div class="label">Checklist Completion</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="stat-card premium-card">
+      <div class="stat-icon" style="background:#fef3c7;">
+        <i class="bi bi-check2-all" style="color:#d97706;"></i>
+      </div>
+      <div>
+        <div class="value" style="color:#d97706;">{{ checklist_completed_count }}<span style="font-size:.85rem;font-weight:500;color:#9ca3af;">/{{ total_checklist_items }}</span></div>
+        <div class="label">Items Completed</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="stat-card premium-card">
+      <div class="stat-icon" style="background:#ede9fe;">
+        <i class="bi bi-clock-history" style="color:#7c3aed;"></i>
+      </div>
+      <div>
+        <div class="value" style="color:#7c3aed;">{{ total_hours_logged }}<span style="font-size:.85rem;font-weight:500;color:#9ca3af;"> hrs</span></div>
+        <div class="label">Total Hours Logged</div>
+      </div>
+    </div>
+  </div>
+
+  {% if has_efficiency_data %}
+  <div class="col-6 col-xl-3">
+    <div class="stat-card premium-card">
+      <div class="stat-icon" style="background:#dcfce7;">
+        <i class="bi bi-graph-up-arrow" style="color:#16a34a;"></i>
+      </div>
+      <div>
+        <div class="value" style="color:#16a34a;">{{ efficiency_percentage }}%</div>
+        <div class="label">On-Time Efficiency</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /kpi cards -->
+
+
+<!-- ── Charts Row 1: Workload + Efficiency ────────────────────────── -->
 <div class="row g-4 mb-4">
+
   <!-- Workload Chart -->
   <div class="col-12 col-lg-7">
     <div class="chart-card premium-card h-100">
@@ -19,101 +88,143 @@
         <i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i>
         Active Task Workload per Employee
       </div>
-      <div class="py-2">
-        {% if has_workload_data %}
-          <div class="chart-frame">
-            <canvas id="workloadChart"></canvas>
-          </div>
-        {% else %}
-          <div class="py-5 text-center text-muted">
-            <i class="bi bi-clipboard2-check fs-1 mb-3"></i>
-            <p>No active/pending tasks are currently assigned to employees.</p>
-          </div>
-        {% endif %}
-      </div>
+      {% if has_workload_data %}
+        <div class="chart-frame">
+          <canvas id="workloadChart"></canvas>
+        </div>
+      {% else %}
+        <div class="py-5 text-center text-muted">
+          <i class="bi bi-clipboard2-check fs-1 mb-3 d-block"></i>
+          <p class="mb-0">No active or pending tasks currently assigned.</p>
+        </div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- Efficiency Chart -->
+  <!-- Efficiency Doughnut -->
   <div class="col-12 col-lg-5">
     <div class="chart-card premium-card h-100">
       <div class="card-title">
         <i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i>
-        Completion Efficiency: Completed vs. Overdue
+        Completion Efficiency — Completed vs Overdue
       </div>
-      <div class="py-2">
-        {% if has_efficiency_data %}
-          <div class="chart-frame">
-            <canvas id="efficiencyChart"></canvas>
-          </div>
-          <div class="mt-3 fw-semibold text-secondary text-center" style="font-size: 0.9rem;">
-            Overall On-Time Efficiency Rate: <span class="text-success">{{ efficiency_percentage }}%</span>
-          </div>
-        {% else %}
-          <div class="py-5 text-center text-muted">
-            <i class="bi bi-pie-chart fs-1 mb-3"></i>
-            <p>No completed or overdue tasks exist to calculate efficiency.</p>
-          </div>
-        {% endif %}
+      {% if has_efficiency_data %}
+        <div class="chart-frame">
+          <canvas id="efficiencyChart"></canvas>
+        </div>
+        <p class="mt-2 text-center text-secondary fw-semibold" style="font-size:.88rem;">
+          On-Time Rate: <span class="text-success">{{ efficiency_percentage }}%</span>
+        </p>
+      {% else %}
+        <div class="py-5 text-center text-muted">
+          <i class="bi bi-pie-chart fs-1 mb-3 d-block"></i>
+          <p class="mb-0">No completed or overdue tasks to calculate efficiency.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /charts row 1 -->
+
+
+<!-- ── Charts Row 2: Checklist Progress per Employee ─────────────── -->
+{% if has_checklist_chart_data %}
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="chart-card premium-card">
+      <div class="card-title">
+        <i class="bi bi-bar-chart-steps me-1" style="color:var(--cysd-purple);"></i>
+        Checklist Status Breakdown per Employee
+        <span class="ms-2 text-muted fw-normal" style="font-size:.82rem;">Completed · Awaiting Review · Pending</span>
+      </div>
+      <div class="chart-frame" style="min-height:260px;">
+        <canvas id="checklistChart"></canvas>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
 
-<!-- Table Card -->
+
+<!-- ── Staff Workload Registry Table ──────────────────────────────── -->
 <div class="table-card mb-4">
   <div class="table-header">
-    <h6><i class="bi bi-table me-1"></i> Staff Workload Registry &amp; Deadlines</h6>
+    <h6><i class="bi bi-table me-1"></i> Staff Workload Registry &amp; Checklist Progress</h6>
   </div>
   <div class="table-responsive">
     <table class="table table-borderless table-hover mobile-card-table align-middle mb-0">
       <thead>
         <tr>
-          <th>Employee Name</th>
-          <th>Designation</th>
-          <th>Primary Domain</th>
-          <th class="text-center">Active Projects Led</th>
-          <th class="text-center">Active Tasks Assigned</th>
-          <th>Nearest Upcoming Deadline</th>
+          <th>Employee</th>
+          <th>Domain</th>
+          <th class="text-center">Active Tasks</th>
+          <th class="text-center">Projects Led</th>
+          <th class="text-center">Checklist</th>
+          <th class="text-center">Hours Logged</th>
+          <th>Nearest Deadline</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for data in employees_data %}
         <tr>
-          <td data-label="Employee Name" class="fw-semibold text-dark">
-            <i class="bi bi-person-fill text-secondary me-1"></i>{{ data.employee.name }}
+          <td data-label="Employee" class="fw-semibold text-dark">
+            <i class="bi bi-person-circle text-secondary me-1"></i>{{ data.employee.name }}
+            <div class="text-muted fw-normal" style="font-size:.78rem;">{{ data.employee.designation }}</div>
           </td>
-          <td data-label="Designation">{{ data.employee.designation }}</td>
-          <td data-label="Primary Domain">
+          <td data-label="Domain">
             {% if data.employee.domain %}
               <span class="badge bg-light text-dark border">{{ data.employee.domain.name }}</span>
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td data-label="Active Projects Led" class="text-center">
+          <td data-label="Active Tasks" class="text-center">
+            <span class="badge rounded-pill px-3 fw-bold
+              {% if data.active_tasks > 5 %}bg-danger-subtle text-danger border border-danger-subtle
+              {% elif data.active_tasks > 2 %}bg-warning-subtle text-warning border border-warning-subtle
+              {% else %}bg-info-subtle text-info border border-info-subtle{% endif %}">
+              {{ data.active_tasks }}
+            </span>
+          </td>
+          <td data-label="Projects Led" class="text-center">
             <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3">
               {{ data.active_projects_led }}
             </span>
           </td>
-          <td data-label="Active Tasks Assigned" class="text-center">
-            <span class="badge bg-info-subtle text-info border border-info-subtle fw-bold rounded-pill px-3">
-              {{ data.active_tasks }}
-            </span>
+          <td data-label="Checklist" class="text-center" style="min-width:130px;">
+            {% if data.cl_total > 0 %}
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1" style="height:8px;border-radius:99px;min-width:60px;">
+                  <div class="progress-bar bg-success" style="width:{{ data.cl_pct }}%;border-radius:99px;" role="progressbar" aria-valuenow="{{ data.cl_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <small class="text-muted fw-semibold" style="font-size:.78rem;white-space:nowrap;">{{ data.cl_pct }}%</small>
+              </div>
+              <div style="font-size:.73rem;color:#94a3b8;margin-top:2px;">
+                {{ data.cl_completed }}/{{ data.cl_total }}
+                {% if data.cl_awaiting > 0 %}&nbsp;·&nbsp;<span class="text-warning">{{ data.cl_awaiting }} pending review</span>{% endif %}
+              </div>
+            {% else %}
+              <span class="text-muted" style="font-size:.83rem;">No items</span>
+            {% endif %}
           </td>
-          <td data-label="Nearest Upcoming Deadline">
+          <td data-label="Hours Logged" class="text-center">
+            <span class="text-dark fw-semibold">{{ data.hours_logged }}</span>
+            <span class="text-muted" style="font-size:.78rem;"> hrs</span>
+          </td>
+          <td data-label="Nearest Deadline">
             {% if "No upcoming" in data.upcoming_deadline %}
               <span class="text-muted"><i class="bi bi-dash-circle me-1"></i>None</span>
-            {% elif "Overdue" in data.upcoming_deadline or "Task:" in data.upcoming_deadline %}
-              <span class="text-danger fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>{{ data.upcoming_deadline }}</span>
             {% else %}
-              <span class="text-dark fw-medium"><i class="bi bi-alarm me-1 text-secondary"></i>{{ data.upcoming_deadline }}</span>
+              <span class="{% if 'Task:' in data.upcoming_deadline %}text-danger{% else %}text-dark{% endif %} fw-medium">
+                <i class="bi bi-alarm me-1 text-secondary"></i>{{ data.upcoming_deadline }}
+              </span>
             {% endif %}
           </td>
           <td data-label="Actions">
             {% if request.user.is_superuser or request.user.employee_profile.permissions.can_assign_checklist_items %}
-            <a href="/admin/tracker/task/add/?assigned_to={{ data.employee.id }}" class="btn btn-sm btn-outline-primary" style="font-size: .8rem;">
+            <a href="/admin/tracker/task/add/?assigned_to={{ data.employee.id }}"
+               class="btn btn-sm btn-outline-primary" style="font-size:.78rem;">
               <i class="bi bi-plus-lg"></i> Assign Task
             </a>
             {% endif %}
@@ -121,8 +232,8 @@
         </tr>
         {% empty %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-4">
-            No active staff or employees found.
+          <td colspan="8" class="text-center text-muted py-4">
+            No active staff or employees found in your analytics scope.
           </td>
         </tr>
         {% endfor %}
@@ -131,30 +242,44 @@
   </div>
 </div>
 
-<!-- Explanation details -->
-<div class="row g-4 mt-2 mb-4">
+
+<!-- ── Explanation Cards ───────────────────────────────────────────── -->
+<div class="row g-4 mt-1 mb-4">
   <div class="col-12">
     <div class="card premium-card p-4">
-      <h5 class="fw-bold mb-3" style="color: var(--cysd-navy);">
+      <h5 class="fw-bold mb-3" style="color:var(--cysd-navy);">
         <i class="bi bi-info-circle-fill me-2 text-primary"></i>Understanding Employee Analytics
       </h5>
-      <p class="text-secondary" style="font-size: 0.92rem; line-height: 1.6;">
-        This registry and the accompanying visualizations track organization workload distribution and project timelines. Monitoring these metrics prevents team burnout, guides task allocation, and ensures program delivery schedules remain on track.
+      <p class="text-secondary" style="font-size:.92rem;line-height:1.6;">
+        These visualizations map workload distribution, checklist compliance, and delivery efficiency across the team.
+        Use them to identify overloaded individuals, track task approval bottlenecks, and ensure program schedules remain on track.
       </p>
       <div class="row g-3 mt-1">
-        <div class="col-12 col-md-6">
-          <div class="p-3 rounded bg-light border-start border-cyan border-3 h-100" style="border-left-color: var(--cysd-teal) !important;">
-            <h6 class="fw-bold text-dark"><i class="bi bi-bar-chart-fill me-1" style="color: var(--cysd-teal);"></i> Active Task Workload</h6>
-            <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-              This horizontal bar chart ranks active employees by the volume of tasks currently assigned to them as <strong>Pending</strong> or <strong>In Progress</strong>. An excessive concentration of tasks on a single individual indicates potential project bottlenecks and points to re-allocation opportunities.
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-3 h-100" style="border-left-color:var(--cysd-teal) !important;">
+            <h6 class="fw-bold text-dark"><i class="bi bi-bar-chart-fill me-1" style="color:var(--cysd-teal);"></i> Task Workload</h6>
+            <p class="text-muted mb-0" style="font-size:.82rem;line-height:1.5;">
+              Ranks active employees by volume of <strong>Pending / In-Progress</strong> tasks. An imbalanced bar chart
+              highlights re-allocation opportunities and potential bottlenecks.
             </p>
           </div>
         </div>
-        <div class="col-12 col-md-6">
-          <div class="p-3 rounded bg-light border-start border-amber border-3 h-100" style="border-left-color: var(--cysd-amber) !important;">
-            <h6 class="fw-bold text-dark"><i class="bi bi-pie-chart-fill me-1" style="color: var(--cysd-amber);"></i> Task Completion Efficiency</h6>
-            <p class="text-muted mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-              This ratio compares tasks completed successfully against those that lapsed past their deadline as <strong>Overdue</strong>. A high on-time efficiency rate indicates healthy operational planning, while persistent overdue metrics suggest under-resourcing or unrealistic timelines.
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-3 h-100" style="border-left-color:var(--cysd-purple) !important;">
+            <h6 class="fw-bold text-dark"><i class="bi bi-bar-chart-steps me-1" style="color:var(--cysd-purple);"></i> Checklist Breakdown</h6>
+            <p class="text-muted mb-0" style="font-size:.82rem;line-height:1.5;">
+              Stacked chart showing each employee's checklist item states: <strong>Completed</strong> (green),
+              <strong>Awaiting Review</strong> (amber), and <strong>Pending</strong> (slate).
+              A tall amber segment means supervisor review is the current bottleneck.
+            </p>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="p-3 rounded bg-light border-start border-3 h-100" style="border-left-color:var(--cysd-amber) !important;">
+            <h6 class="fw-bold text-dark"><i class="bi bi-pie-chart-fill me-1" style="color:var(--cysd-amber);"></i> Completion Efficiency</h6>
+            <p class="text-muted mb-0" style="font-size:.82rem;line-height:1.5;">
+              Ratio of tasks completed on time versus those that lapsed into <strong>Overdue</strong>.
+              A high on-time efficiency rate indicates healthy planning; persistent overdue tasks suggest under-resourcing.
             </p>
           </div>
         </div>
@@ -164,61 +289,116 @@
 </div>
 {% endblock %}
 
+
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
-  document.addEventListener("DOMContentLoaded", function() {
-    CYSDCharts.setupChartDefaults();
+document.addEventListener("DOMContentLoaded", function () {
+  CYSDCharts.setupChartDefaults();
 
-    {% if has_workload_data %}
-    const workloadData = {{ workload_json|safe }};
-    new Chart(document.getElementById('workloadChart'), {
-      type: 'bar',
+  // ── 1. Workload – horizontal bar ───────────────────────────────────
+  {% if has_workload_data %}
+  (function () {
+    const canvas = document.getElementById("workloadChart");
+    const ctx    = canvas.getContext("2d");
+    const data   = {{ workload_json|safe }};
+
+    // Build a gradient per bar (teal → teal-alpha)
+    const grad = CYSDCharts.makeGradient(ctx, CYSDCharts.palette.teal, CYSDCharts.palette.tealAlpha, canvas.offsetHeight || 280);
+
+    new Chart(canvas, {
+      type: "bar",
       data: {
-        labels: workloadData.labels,
+        labels: data.labels,
         datasets: [{
-          label: 'Active Tasks',
-          data: workloadData.data,
-          backgroundColor: CYSDCharts.palette.cyan,
-          borderRadius: 4,
+          label: "Active Tasks",
+          data: data.data,
+          backgroundColor: grad,
+          borderRadius: 5,
           borderSkipped: false,
-        }]
+        }],
       },
-      options: CYSDCharts.barOptions(workloadData.data, 'task', {
-        indexAxis: 'y',
+      options: CYSDCharts.barOptions(data.data, "task", {
+        indexAxis: "y",
         scales: {
           x: {
             beginAtZero: true,
             ticks: { stepSize: 1, precision: 0, color: CYSDCharts.palette.slate },
             grid: { color: CYSDCharts.palette.grid, drawTicks: false },
-            border: { display: false }
+            border: { display: false },
           },
           y: {
             grid: { display: false },
             border: { display: false },
-            ticks: { color: CYSDCharts.palette.slate }
-          }
-        }
-      })
+            ticks: { color: CYSDCharts.palette.slate, font: { weight: "500" } },
+          },
+        },
+      }),
     });
-    {% endif %}
+  })();
+  {% endif %}
 
-    {% if has_efficiency_data %}
-    const efficiencyData = {{ efficiency_json|safe }};
-    new Chart(document.getElementById('efficiencyChart'), {
-      type: 'doughnut',
+  // ── 2. Efficiency – doughnut ───────────────────────────────────────
+  {% if has_efficiency_data %}
+  (function () {
+    const data = {{ efficiency_json|safe }};
+    new Chart(document.getElementById("efficiencyChart"), {
+      type: "doughnut",
       data: {
-        labels: efficiencyData.labels,
+        labels: data.labels,
         datasets: [{
-          data: efficiencyData.data,
+          data: data.data,
           backgroundColor: [CYSDCharts.palette.teal, CYSDCharts.palette.red],
-          borderWidth: 2,
-          borderColor: '#ffffff',
-        }]
+          borderWidth: 3,
+          borderColor: "#ffffff",
+          hoverOffset: 6,
+        }],
       },
-      options: CYSDCharts.doughnutOptions(efficiencyData.data, 'task', '70%')
+      options: CYSDCharts.doughnutOptions(data.data, "task", "70%"),
     });
-    {% endif %}
-  });
+  })();
+  {% endif %}
+
+  // ── 3. Checklist stacked bar ───────────────────────────────────────
+  {% if has_checklist_chart_data %}
+  (function () {
+    const data = {{ checklist_chart_json|safe }};
+    const allTotals = data.labels.map((_, i) =>
+      (data.completed[i] || 0) + (data.awaiting[i] || 0) + (data.pending[i] || 0)
+    );
+
+    new Chart(document.getElementById("checklistChart"), {
+      type: "bar",
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: "Completed",
+            data: data.completed,
+            backgroundColor: CYSDCharts.palette.teal,
+            borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+            borderSkipped: false,
+          },
+          {
+            label: "Awaiting Review",
+            data: data.awaiting,
+            backgroundColor: CYSDCharts.palette.amber,
+            borderRadius: 0,
+            borderSkipped: false,
+          },
+          {
+            label: "Pending",
+            data: data.pending,
+            backgroundColor: CYSDCharts.palette.slate,
+            borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+            borderSkipped: false,
+          },
+        ],
+      },
+      options: CYSDCharts.stackedOptions(allTotals, "item"),
+    });
+  })();
+  {% endif %}
+});
 </script>
 {% endblock %}
