@@ -36,13 +36,8 @@ class DevSwitchTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import User
 
-        from tracker.models import Enterprise
-        # Get or create an Enterprise
-        self.enterprise, _ = Enterprise.objects.get_or_create(
-            subdomain="cysd",
-            defaults={"name": "CYSD"}
-        )
-        # Create user mapped in DEV_ROLE_MAP
+        
+                # Create user mapped in DEV_ROLE_MAP
         self.user = User.objects.create_user(
             username="admin",
             email="admin@cysd.org",
@@ -54,14 +49,14 @@ class DevSwitchTests(TestCase):
         # We access the URL with subdomain cysd.localhost
         client = self.client
         # Set HTTP_HOST to cysd.localhost so middleware detects the subdomain
-        response = client.get('/dashboard/dev-switch/founder/', HTTP_HOST='cysd.localhost')
+        response = client.get('/dashboard/dev-switch/founder/')
 
         # Verify redirect to dashboard
         self.assertEqual(response.status_code, 302)
 
         # Verify Employee profile was created with the correct tenant
         employee = Employee.objects.get(user=self.user)
-        self.assertEqual(employee.enterprise, self.enterprise)
+        
 
     def test_login_rate_limiting(self):
         from django.core.cache import cache
@@ -69,11 +64,11 @@ class DevSwitchTests(TestCase):
 
         # The login view is rate limited to 10 requests per 60 seconds
         for _ in range(10):
-            response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
+            response = self.client.get('/accounts/login/')
             self.assertEqual(response.status_code, 200)
 
         # 11th request should return 429
-        response = self.client.get('/accounts/login/', HTTP_HOST='cysd.localhost')
+        response = self.client.get('/accounts/login/')
         self.assertEqual(response.status_code, 429)
 
     def test_startup_check_logs_warning_on_wildcard_hosts(self):
@@ -86,412 +81,19 @@ class DevSwitchTests(TestCase):
             self.assertTrue(any("ALLOWED_HOSTS contains '*'" in log for log in cm.output))
 
 
-class MultiTenantDataIsolationTests(TestCase):
-    def setUp(self):
-        from django.contrib.auth.models import User
-        from django.core.cache import cache
-
-        from tracker.models import Domain, Employee, Enterprise, Meeting, TaskChecklist
-        cache.clear()
-
-        # 1. Create two Enterprises
-        self.tenant_a = Enterprise.objects.create(name="Tenant A", subdomain="a")
-        self.tenant_b = Enterprise.objects.create(name="Tenant B", subdomain="b")
-
-        # 2. Create Domains for both
-        self.domain_a = Domain.objects.create(name="Domain A", code="DA", enterprise=self.tenant_a)
-        self.domain_b = Domain.objects.create(name="Domain B", code="DB", enterprise=self.tenant_b)
-
-        # 3. Create Employees
-        self.user_a = User.objects.create_user(username="user_a", password="password123")
-        self.employee_a = Employee.objects.create(
-            user=self.user_a,
-            name="Employee A",
-            employee_id="EMP-A",
-            email="a@tenant.com",
-            designation="Manager",
-            enterprise=self.tenant_a,
-            domain=self.domain_a,
-        )
-
-        self.user_b = User.objects.create_user(username="user_b", password="password123")
-        self.employee_b = Employee.objects.create(
-            user=self.user_b,
-            name="Employee B",
-            employee_id="EMP-B",
-            email="b@tenant.com",
-            designation="Manager",
-            enterprise=self.tenant_b,
-            domain=self.domain_b,
-        )
-
-        self.employee_a.permissions.can_assign_checklist_items = True
-        self.employee_a.permissions.checklist_assign_scope = "all"
-        self.employee_a.permissions.save()
-        self.employee_b.permissions.can_assign_checklist_items = True
-        self.employee_b.permissions.checklist_assign_scope = "all"
-        self.employee_b.permissions.save()
-
-        # 4. Create Meetings
-        self.meeting_a = Meeting.objects.create(
-            title="Meeting A",
-            date="2026-07-11",
-            start_time="10:00",
-            end_time="11:00",
-            enterprise=self.tenant_a,
-            domain=self.domain_a,
-            agenda="Secret Agenda A",
-        )
-        self.meeting_a.attendees.add(self.employee_a)
-
-        self.meeting_b = Meeting.objects.create(
-            title="Meeting B",
-            date="2026-07-11",
-            start_time="10:00",
-            end_time="11:00",
-            enterprise=self.tenant_b,
-            domain=self.domain_b,
-            agenda="Secret Agenda B",
-        )
-        self.meeting_b.attendees.add(self.employee_b)
-
-        # 5. Create a Checklist Item for Tenant B
-        self.checklist_b = TaskChecklist.objects.create(
-            title="Checklist B",
-            enterprise=self.tenant_b,
-            assigned_to=self.employee_b,
-            created_by=self.employee_b,
-            status='AWAITING_VERIFICATION',
-        )
-
-    @override_settings(STORAGES={
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-    })
-    def test_list_views_isolate_tenant_data(self):
-        # Log in user A
-        self.client.login(username="user_a", password="password123")
-
-        views_to_test = [
-            ('/dashboard/', 'tracker:dashboard'),
-            ('/dashboard/employees/', 'tracker:employees'),
-            ('/dashboard/meetings/', 'tracker:meetings'),
-            ('/dashboard/domains/', 'tracker:domains'),
-        ]
-
-        for url, route_name in views_to_test:
-            # Request on Tenant A's subdomain
-            response = self.client.get(url, HTTP_HOST='a.localhost')
-            self.assertEqual(response.status_code, 200)
-
-            # Check context/HTML does not contain Tenant B's data
-            content_str = response.content.decode('utf-8')
-            self.assertNotIn("Tenant B", content_str)
-            self.assertNotIn("Domain B", content_str)
-            self.assertNotIn("Employee B", content_str)
-            self.assertNotIn("Meeting B", content_str)
-
-    def test_direct_access_to_other_tenant_record_is_blocked(self):
-        self.client.login(username="user_a", password="password123")
-
-        # Attempt to resolve Tenant B's checklist item using Tenant A's subdomain
-        response = self.client.post(
-            f'/dashboard/checklist/resolve/{self.checklist_b.pk}/',
-            {'action': 'approve'},
-            HTTP_HOST='a.localhost'
-        )
-        # It should either be a 404 or 403 (Forbidden)
-        self.assertIn(response.status_code, [403, 404])
-
-        # Attempt to submit Tenant B's checklist item
-        response = self.client.post(
-            f'/dashboard/checklist/submit/{self.checklist_b.pk}/',
-            HTTP_HOST='a.localhost'
-        )
-        # Should redirect back or return 403/404, status should not change
-        self.checklist_b.refresh_from_db()
-        self.assertEqual(self.checklist_b.status, 'AWAITING_VERIFICATION')
-
-    def test_middleware_unknown_subdomain(self):
-        # Request on an unknown subdomain
-        response = self.client.get('/dashboard/', HTTP_HOST='unknown.localhost')
-        self.assertEqual(response.status_code, 404)
-
-    def test_middleware_exempt_paths(self):
-        # Path /admin/ should not raise 404 even without a tenant
-        response = self.client.get('/admin/', HTTP_HOST='localhost')
-        self.assertNotEqual(response.status_code, 404)
-
-    @override_settings(STORAGES={
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-    })
-    def test_admin_list_views_fallback_to_owner_tenant_on_bare_domain(self):
-        from django.contrib.auth.models import Permission, User
-
-        from tracker.models import (
-            Domain,
-            Employee,
-            Meeting,
-            Project,
-            Task,
-            TaskChecklist,
-        )
-
-        founder_user = User.objects.create_user(
-            username='founder_admin_a',
-            password='password123',
-            is_staff=True,
-        )
-        founder_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
-        founder_user.save()
-        founder_emp = Employee.objects.create(
-            user=founder_user,
-            name='Founder Admin A',
-            employee_id='EMP-A-ADMIN',
-            email='founder-admin-a@tenant.com',
-            designation='Founder',
-            enterprise=self.tenant_a,
-            domain=self.domain_a,
-        )
-        founder_emp.permissions.can_access_admin_panel = True
-        founder_emp.permissions.save()
-
-        # Create complete set of objects for Tenant A
-        project_a = Project.objects.create(
-            title='Project A Title',
-            enterprise=self.tenant_a,
-            domain=self.domain_a,
-            lead_employee=self.employee_a,
-            status='active',
-            start_date='2026-07-11',
-            deadline='2026-07-20',
-        )
-        task_a = Task.objects.create(
-            title='Task A Title',
-            enterprise=self.tenant_a,
-            project=project_a,
-            due_date='2026-07-20',
-            status='pending',
-        )
-        task_a.assigned_to.add(self.employee_a)
-        checklist_a = TaskChecklist.objects.create(
-            title='Checklist A Title',
-            enterprise=self.tenant_a,
-            assigned_to=self.employee_a,
-            created_by=self.employee_a,
-            status='PENDING',
-        )
-        self.assertEqual(checklist_a.enterprise, self.tenant_a)
-
-        # Create complete set of objects for Tenant B
-        project_b = Project.objects.create(
-            title='Project B Title',
-            enterprise=self.tenant_b,
-            domain=self.domain_b,
-            lead_employee=self.employee_b,
-            status='active',
-            start_date='2026-07-11',
-            deadline='2026-07-20',
-        )
-        task_b = Task.objects.create(
-            title='Task B Title',
-            enterprise=self.tenant_b,
-            project=project_b,
-            due_date='2026-07-20',
-            status='pending',
-        )
-        task_b.assigned_to.add(self.employee_b)
-        checklist_b = TaskChecklist.objects.create(
-            title='Checklist B Title',
-            enterprise=self.tenant_b,
-            assigned_to=self.employee_b,
-            created_by=self.employee_b,
-            status='PENDING',
-        )
-        self.assertEqual(checklist_b.enterprise, self.tenant_b)
-
-        request_factory = RequestFactory()
-        admin_models = [
-            (Domain, '/admin/tracker/domain/'),
-            (Employee, '/admin/tracker/employee/'),
-            (Meeting, '/admin/tracker/meeting/'),
-            (Project, '/admin/tracker/project/'),
-            (Task, '/admin/tracker/task/'),
-            (TaskChecklist, '/admin/tracker/taskchecklist/'),
-        ]
-
-        self.client.login(username='founder_admin_a', password='password123')
-
-        for model_class, admin_url in admin_models:
-            # 1. Test using request factory & get_queryset directly
-            request = request_factory.get(admin_url, HTTP_HOST='localhost')
-            request.user = founder_user
-            request.tenant = None
-
-            admin_instance = admin.site._registry[model_class]
-            queryset = admin_instance.get_queryset(request)
-
-            self.assertTrue(queryset.filter(enterprise=self.tenant_a).exists())
-            self.assertFalse(queryset.filter(enterprise=self.tenant_b).exists())
-
-            # 2. Test actual GET request using test client
-            response = self.client.get(admin_url, HTTP_HOST='localhost')
-            self.assertEqual(response.status_code, 200)
-            html_content = response.content.decode('utf-8')
-
-            # Assert Tenant A records (from self.tenant_a) are visible, and Tenant B are not
-            if model_class == Domain:
-                self.assertIn("Domain A", html_content)
-                self.assertNotIn("Domain B", html_content)
-            elif model_class == Employee:
-                self.assertIn("Employee A", html_content)
-                self.assertNotIn("Employee B", html_content)
-            elif model_class == Meeting:
-                self.assertIn("Meeting A", html_content)
-                self.assertNotIn("Meeting B", html_content)
-            elif model_class == Project:
-                self.assertIn("Project A Title", html_content)
-                self.assertNotIn("Project B Title", html_content)
-            elif model_class == Task:
-                self.assertIn("Task A Title", html_content)
-                self.assertNotIn("Task B Title", html_content)
-            elif model_class == TaskChecklist:
-                self.assertIn("Checklist A Title", html_content)
-                self.assertNotIn("Checklist B Title", html_content)
-
-    @override_settings(STORAGES={
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-    })
-    def test_admin_list_view_for_user_without_employee_profile_is_empty(self):
-        from django.contrib.auth.models import Permission, User
-
-        from tracker.models import (
-            Domain,
-            Employee,
-            Meeting,
-            Project,
-            Task,
-            TaskChecklist,
-        )
-
-        user_without_profile = User.objects.create_user(
-            username='staff_no_profile',
-            password='password123',
-            is_staff=True,
-        )
-        user_without_profile.user_permissions.add(*Permission.objects.filter(content_type__app_label='tracker'))
-        user_without_profile.save()
-
-        self.client.login(username='staff_no_profile', password='password123')
-
-        admin_models = [
-            (Domain, '/admin/tracker/domain/'),
-            (Employee, '/admin/tracker/employee/'),
-            (Meeting, '/admin/tracker/meeting/'),
-            (Project, '/admin/tracker/project/'),
-            (Task, '/admin/tracker/task/'),
-            (TaskChecklist, '/admin/tracker/taskchecklist/'),
-        ]
-
-        for model_class, admin_url in admin_models:
-            # 1. Request Factory Queryset verification
-            request = RequestFactory().get(admin_url, HTTP_HOST='localhost')
-            request.user = user_without_profile
-            request.tenant = None
-
-            admin_instance = admin.site._registry[model_class]
-            queryset = admin_instance.get_queryset(request)
-            self.assertEqual(queryset.count(), 0)
-
-            # 2. Client GET request verification
-            response = self.client.get(admin_url, HTTP_HOST='localhost')
-            self.assertEqual(response.status_code, 200)
-            html_content = response.content.decode('utf-8')
-            if model_class == Domain:
-                self.assertNotIn("Domain A", html_content)
-                self.assertNotIn("Domain B", html_content)
-            elif model_class == Employee:
-                self.assertNotIn("Employee A", html_content)
-                self.assertNotIn("Employee B", html_content)
-            elif model_class == Meeting:
-                self.assertNotIn("Meeting A", html_content)
-                self.assertNotIn("Meeting B", html_content)
-            elif model_class == Project:
-                self.assertNotIn("Project A Title", html_content)
-                self.assertNotIn("Project B Title", html_content)
-            elif model_class == Task:
-                self.assertNotIn("Task A Title", html_content)
-                self.assertNotIn("Task B Title", html_content)
-            elif model_class == TaskChecklist:
-                self.assertNotIn("Checklist A Title", html_content)
-                self.assertNotIn("Checklist B Title", html_content)
-
-    def test_middleware_cross_tenant_mismatch_logout(self):
-        # Authenticated user A attempts to access Tenant B's workspace
-        self.client.login(username="user_a", password="password123")
-
-        response = self.client.get('/dashboard/', HTTP_HOST='b.localhost', follow=True)
-
-        # User should be logged out and redirected to login page with a permission/error message
-        self.assertRedirects(response, '/accounts/login/')
-
-        # Verify the user is logged out (cannot access authenticated views anymore)
-        response_dash = self.client.get('/dashboard/', HTTP_HOST='a.localhost')
-        self.assertRedirects(response_dash, '/accounts/login/?next=/dashboard/')
-
-        # Check messages in response for the error message
-        messages = list(response.context['messages'])
-        self.assertEqual(len(messages), 1)
-        self.assertIn("You do not have permission to access the workspace for 'Tenant B'.", str(messages[0]))
-
-    def test_nonexistent_subdomain_shows_branded_error_page(self):
-        # 1. With DEBUG = True
-        with self.settings(DEBUG=True):
-            response = self.client.get('/dashboard/', HTTP_HOST='nonexistent.localhost')
-            self.assertEqual(response.status_code, 404)
-            self.assertIn("Workspace Not Found", response.content.decode('utf-8'))
-            self.assertIn("Developer Note", response.content.decode('utf-8'))
-            self.assertIn("a", response.content.decode('utf-8'))
-            self.assertIn("b", response.content.decode('utf-8'))
-
-        # 2. With DEBUG = False
-        with self.settings(DEBUG=False):
-            response = self.client.get('/dashboard/', HTTP_HOST='nonexistent.localhost')
-            self.assertEqual(response.status_code, 404)
-            self.assertIn("Workspace Not Found", response.content.decode('utf-8'))
-            self.assertNotIn("Developer Note", response.content.decode('utf-8'))
-
-    def test_no_workspace_specified_shows_branded_error_page(self):
-        # 1. With DEBUG = True
-        with self.settings(DEBUG=True):
-            response = self.client.get('/dashboard/', HTTP_HOST='localhost')
-            self.assertEqual(response.status_code, 404)
-            self.assertIn("No Workspace Specified", response.content.decode('utf-8'))
-            self.assertIn("Developer Note", response.content.decode('utf-8'))
-
-        # 2. With DEBUG = False
-        with self.settings(DEBUG=False):
-            response = self.client.get('/dashboard/', HTTP_HOST='localhost')
-            self.assertEqual(response.status_code, 404)
-            self.assertIn("No Workspace Specified", response.content.decode('utf-8'))
-            self.assertNotIn("Developer Note", response.content.decode('utf-8'))
-
-
 class RoleBasedPermissionTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import User
         from django.core.cache import cache
 
-        from tracker.models import Domain, Employee, Enterprise
+        from tracker.models import Domain, Employee
         cache.clear()
 
-        # Create Enterprise
-        self.tenant = Enterprise.objects.create(name="Enterprise A", subdomain="cysd-role")
+        # Create 
+        
 
         # Create Domain
-        self.domain = Domain.objects.create(name="Domain A", code="DA", enterprise=self.tenant)
+        self.domain = Domain.objects.create(name="Domain A", code="DA", )
 
         # Create Users & Employees
         # Supervisor
@@ -501,7 +103,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Supervisor",
             employee_id="EMP-SUP",
             email="sup@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -513,7 +114,6 @@ class RoleBasedPermissionTests(TestCase):
             employee_id="EMP-SUB",
             email="sub@cysd.com",
             supervisor=self.supervisor,
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -524,7 +124,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Non Subordinate",
             employee_id="EMP-OTHER",
             email="other@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -535,7 +134,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Founder",
             employee_id="EMP-FND",
             email="fnd@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -546,7 +144,6 @@ class RoleBasedPermissionTests(TestCase):
             name="HR",
             employee_id="EMP-HR",
             email="hr@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -557,7 +154,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Employee",
             employee_id="EMP-REG",
             email="reg@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -603,7 +199,6 @@ class RoleBasedPermissionTests(TestCase):
         from tracker.models import TaskChecklist
         item = TaskChecklist(
             title="Direct Report Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
         )
@@ -622,8 +217,7 @@ class RoleBasedPermissionTests(TestCase):
                 'assigned_to': self.subordinate.pk,
                 'created_by': self.supervisor.pk,
                 'status': 'PENDING',
-            },
-            HTTP_HOST='cysd-role.localhost'
+            }
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(TaskChecklist.objects.filter(title='Admin Direct Report Task').exists())
@@ -639,7 +233,6 @@ class RoleBasedPermissionTests(TestCase):
 
         item = TaskChecklist(
             title="Non-Subordinate Task",
-            enterprise=self.tenant,
             assigned_to=self.non_subordinate,
             created_by=self.supervisor,
         )
@@ -659,8 +252,7 @@ class RoleBasedPermissionTests(TestCase):
                 'assigned_to': self.non_subordinate.pk,
                 'created_by': self.supervisor.pk,
                 'status': 'PENDING',
-            },
-            HTTP_HOST='cysd-role.localhost'
+            }
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("does not report to them", response.content.decode('utf-8'))
@@ -675,7 +267,6 @@ class RoleBasedPermissionTests(TestCase):
 
         item1 = TaskChecklist(
             title="Founder Task",
-            enterprise=self.tenant,
             assigned_to=self.non_subordinate,
             created_by=self.founder,
         )
@@ -684,7 +275,6 @@ class RoleBasedPermissionTests(TestCase):
 
         item2 = TaskChecklist(
             title="HR Task",
-            enterprise=self.tenant,
             assigned_to=self.non_subordinate,
             created_by=self.hr,
         )
@@ -703,8 +293,7 @@ class RoleBasedPermissionTests(TestCase):
                 'assigned_to': self.non_subordinate.pk,
                 'created_by': self.founder.pk,
                 'status': 'PENDING',
-            },
-            HTTP_HOST='cysd-role.localhost'
+            }
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(TaskChecklist.objects.filter(title='Founder Admin Task').exists())
@@ -721,8 +310,7 @@ class RoleBasedPermissionTests(TestCase):
                 'assigned_to': self.non_subordinate.pk,
                 'created_by': self.hr.pk,
                 'status': 'PENDING',
-            },
-            HTTP_HOST='cysd-role.localhost'
+            }
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(TaskChecklist.objects.filter(title='HR Admin Task').exists())
@@ -743,7 +331,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Intern",
             employee_id="EMP-INT",
             email="intern@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -753,7 +340,6 @@ class RoleBasedPermissionTests(TestCase):
             name="Volunteer",
             employee_id="EMP-VOL",
             email="vol@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -775,8 +361,7 @@ class RoleBasedPermissionTests(TestCase):
                     'assigned_to': self.non_subordinate.pk,
                     'created_by': creator.pk,
                     'status': 'PENDING',
-                },
-                HTTP_HOST='cysd-role.localhost'
+                }
             )
             self.assertEqual(response.status_code, 403)
 
@@ -785,14 +370,13 @@ class RoleBasedPermissionTests(TestCase):
             self.client.login(username=user.username, password="password123")
 
             # Verification center view
-            response = self.client.get('/dashboard/checklist/verify/', HTTP_HOST='cysd-role.localhost')
+            response = self.client.get('/dashboard/checklist/verify/')
             self.assertEqual(response.status_code, 403)
 
             # Resolve view
             response = self.client.post(
                 '/dashboard/checklist/resolve/1/',
-                {'action': 'approve'},
-                HTTP_HOST='cysd-role.localhost'
+                {'action': 'approve'}
             )
             self.assertEqual(response.status_code, 403)
 
@@ -802,23 +386,23 @@ class RoleBasedPermissionTests(TestCase):
     })
     def test_hr_masked_meeting_visibility(self):
         from tracker.models import Meeting
-        Meeting.objects.create(
+        meeting = Meeting.objects.create(
             title="Confidential Meeting",
             date="2026-07-11",
             start_time="10:00",
             end_time="11:00",
-            enterprise=self.tenant,
             domain=self.domain,
             agenda="Super secret details",
             minutes="Secret minutes",
             action_points="Secret actions",
         )
+        meeting.attendees.add(self.hr, self.founder)
 
         # Test HR user - should be masked
         self.client.login(username="hr_u", password="password123")
 
         # Dashboard View
-        response = self.client.get('/dashboard/', HTTP_HOST='cysd-role.localhost')
+        response = self.client.get('/dashboard/')
         self.assertEqual(response.status_code, 200)
         recent_meetings = response.context['recent_meetings']
         self.assertEqual(len(recent_meetings), 1)
@@ -827,7 +411,7 @@ class RoleBasedPermissionTests(TestCase):
         self.assertEqual(recent_meetings[0].action_points, 'Confidential - Access Restricted')
 
         # Meetings List View
-        response = self.client.get('/dashboard/meetings/', HTTP_HOST='cysd-role.localhost')
+        response = self.client.get('/dashboard/meetings/')
         self.assertEqual(response.status_code, 200)
         meetings = response.context['meetings']
         self.assertEqual(len(meetings), 1)
@@ -839,7 +423,7 @@ class RoleBasedPermissionTests(TestCase):
         self.client.login(username="founder_u", password="password123")
 
         # Dashboard View
-        response = self.client.get('/dashboard/', HTTP_HOST='cysd-role.localhost')
+        response = self.client.get('/dashboard/')
         self.assertEqual(response.status_code, 200)
         recent_meetings = response.context['recent_meetings']
         self.assertEqual(recent_meetings[0].agenda, 'Super secret details')
@@ -847,7 +431,7 @@ class RoleBasedPermissionTests(TestCase):
         self.assertEqual(recent_meetings[0].action_points, 'Secret actions')
 
         # Meetings List View
-        response = self.client.get('/dashboard/meetings/', HTTP_HOST='cysd-role.localhost')
+        response = self.client.get('/dashboard/meetings/')
         self.assertEqual(response.status_code, 200)
         meetings = response.context['meetings']
         self.assertEqual(meetings[0].agenda, 'Super secret details')
@@ -870,14 +454,12 @@ class RoleBasedPermissionTests(TestCase):
             name="Supervisor B",
             employee_id="EMP-SUP-B",
             email="sup_b@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
         # Create a checklist item for Subordinate A (direct subordinate of Supervisor A)
         checklist_item = TaskChecklist.objects.create(
             title="Subordinate A Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,  # subordinate of supervisor (Supervisor A)
             created_by=self.supervisor,
             status='AWAITING_VERIFICATION',
@@ -889,8 +471,7 @@ class RoleBasedPermissionTests(TestCase):
         # Attempt to resolve the item (action: approve)
         response = self.client.post(
             f'/dashboard/checklist/resolve/{checklist_item.pk}/',
-            {'action': 'approve'},
-            HTTP_HOST='cysd-role.localhost'
+            {'action': 'approve'}
         )
 
         # Should return 403 Forbidden
@@ -913,15 +494,15 @@ class TaskChecklistLifecycleTests(TestCase):
         from django.contrib.auth.models import User
         from django.core.cache import cache
 
-        from tracker.models import Domain, Employee, Enterprise
+        from tracker.models import Domain, Employee
 
         cache.clear()
 
-        # Create Enterprise
-        self.tenant = Enterprise.objects.create(name="Enterprise A", subdomain="cysd-role")
+        # Create 
+        
 
         # Create Domain
-        self.domain = Domain.objects.create(name="Domain A", code="DA", enterprise=self.tenant)
+        self.domain = Domain.objects.create(name="Domain A", code="DA", )
 
         # Create Users & Employees
         # Supervisor
@@ -931,7 +512,6 @@ class TaskChecklistLifecycleTests(TestCase):
             name="Supervisor",
             employee_id="EMP-SUP",
             email="sup@cysd.com",
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -942,7 +522,6 @@ class TaskChecklistLifecycleTests(TestCase):
             employee_id="EMP-SUB",
             email="sub@cysd.com",
             supervisor=self.supervisor,
-            enterprise=self.tenant,
             domain=self.domain,
         )
 
@@ -956,7 +535,6 @@ class TaskChecklistLifecycleTests(TestCase):
         from tracker.models import TaskChecklist
         item = TaskChecklist.objects.create(
             title="Initial Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
         )
@@ -968,7 +546,6 @@ class TaskChecklistLifecycleTests(TestCase):
         from tracker.models import TaskChecklist
         item = TaskChecklist.objects.create(
             title="Submit Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='PENDING',
@@ -978,8 +555,7 @@ class TaskChecklistLifecycleTests(TestCase):
 
         # Submit the item
         response = self.client.post(
-            f'/dashboard/checklist/submit/{item.pk}/',
-            HTTP_HOST='cysd-role.localhost'
+            f'/dashboard/checklist/submit/{item.pk}/'
         )
         self.assertEqual(response.status_code, 302)
 
@@ -993,7 +569,6 @@ class TaskChecklistLifecycleTests(TestCase):
         from tracker.models import TaskChecklist
         item = TaskChecklist.objects.create(
             title="Resolve Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='AWAITING_VERIFICATION',
@@ -1004,8 +579,7 @@ class TaskChecklistLifecycleTests(TestCase):
         # Resolve the item (approve)
         response = self.client.post(
             f'/dashboard/checklist/resolve/{item.pk}/',
-            {'action': 'approve'},
-            HTTP_HOST='cysd-role.localhost'
+            {'action': 'approve'}
         )
         self.assertEqual(response.status_code, 302)
 
@@ -1021,7 +595,6 @@ class TaskChecklistLifecycleTests(TestCase):
         from tracker.models import TaskChecklist
         item = TaskChecklist.objects.create(
             title="Reject Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='AWAITING_VERIFICATION',
@@ -1033,8 +606,7 @@ class TaskChecklistLifecycleTests(TestCase):
         # Resolve the item (reject)
         response = self.client.post(
             f'/dashboard/checklist/resolve/{item.pk}/',
-            {'action': 'reject', 'feedback': 'Please redo the formatting.'},
-            HTTP_HOST='cysd-role.localhost'
+            {'action': 'reject', 'feedback': 'Please redo the formatting.'}
         )
         self.assertEqual(response.status_code, 302)
 
@@ -1050,7 +622,6 @@ class TaskChecklistLifecycleTests(TestCase):
         # 1 PENDING, 1 AWAITING_VERIFICATION
         item_pending = TaskChecklist.objects.create(
             title="Task 1",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='PENDING',
@@ -1058,7 +629,6 @@ class TaskChecklistLifecycleTests(TestCase):
         self.assertEqual(item_pending.status, 'PENDING')
         item_awaiting = TaskChecklist.objects.create(
             title="Task 2",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='AWAITING_VERIFICATION',
@@ -1091,7 +661,6 @@ class TaskChecklistLifecycleTests(TestCase):
 
         item = TaskChecklist.objects.create(
             title="Test Task",
-            enterprise=self.tenant,
             assigned_to=self.subordinate,
             created_by=self.supervisor,
             status='PENDING',
@@ -1126,17 +695,17 @@ import json
 class PermissionUpdateTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import User
-        from tracker.models import Enterprise, Employee
+        from tracker.models import Employee
         
-        self.tenant = Enterprise.objects.create(name="Cyberdyne", subdomain="cyber")
+        
         
         self.hr_user = User.objects.create_user(username="hr", password="password")
-        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, enterprise=self.tenant, email="hr@cyberdyne.com")
+        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, email="hr@cyberdyne.com")
         self.hr.permissions.can_manage_employees = True
         self.hr.permissions.save()
         
         self.emp_user = User.objects.create_user(username="emp", password="password")
-        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, enterprise=self.tenant, email="emp@cyberdyne.com")
+        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, email="emp@cyberdyne.com")
 
     def test_hr_can_update_permissions(self):
         self.client.login(username="hr", password="password")
@@ -1147,8 +716,7 @@ class PermissionUpdateTests(TestCase):
         response = self.client.patch(
             f'/dashboard/employees/{self.emp.id}/permissions/',
             data=json.dumps(payload),
-            content_type='application/json',
-            HTTP_HOST='cyber.localhost'
+            content_type='application/json'
         )
         self.assertEqual(response.status_code, 200)
         self.emp.permissions.refresh_from_db()
@@ -1163,7 +731,6 @@ class PermissionUpdateTests(TestCase):
         response = self.client.patch(
             f'/dashboard/employees/{self.emp.id}/permissions/',
             data=json.dumps(payload),
-            content_type='application/json',
-            HTTP_HOST='cyber.localhost'
+            content_type='application/json'
         )
         self.assertEqual(response.status_code, 403)
