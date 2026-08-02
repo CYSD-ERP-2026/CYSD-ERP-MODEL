@@ -1,12 +1,13 @@
 import re
 
+
 def process_file(filepath, replacements):
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
-    
+
     for pat, rep in replacements:
         content = re.sub(pat, rep, content)
-        
+
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
 

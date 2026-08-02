@@ -17,48 +17,168 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class TenantFilteredViewSet(viewsets.ModelViewSet):
-    """Base ViewSet that automatically filters querysets by the request's tenant."""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return self.queryset
-
-
-class TenantReadOnlyViewSet(
+class EmployeeViewSet(
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Read-only ViewSet that filters by the request's tenant."""
+    """Read-only API for employee records.
+
+    Access control (mirrors web dashboard):
+      - Callers with ``can_manage_employees`` see all Employee records.
+      - Everyone else sees only their own record.
+    """
+
+    serializer_class = EmployeeSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset
+        user = self.request.user
+        profile = getattr(user, 'employee_profile', None)
+        perms = getattr(profile, 'permissions', None) if profile else None
+
+        if perms and perms.can_manage_employees:
+            return Employee.objects.all()
+
+        # Fall back to own record only
+        if profile:
+            return Employee.objects.filter(pk=profile.pk)
+        return Employee.objects.none()
 
 
-class EmployeeViewSet(TenantReadOnlyViewSet):
-    """Read-only API for employee records. Write operations are managed via admin/dashboard."""
-    queryset = Employee.objects.all()
-    serializer_class = EmployeeSerializer
+class MeetingViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only API for meeting records.
 
+    Access control (mirrors web dashboard):
+      - All authenticated users can list meetings.
+      - Confidential fields (agenda, minutes, action_points) are masked
+        unless the caller has ``can_read_confidential_meetings``.
+    """
 
-class MeetingViewSet(TenantReadOnlyViewSet):
-    """Read-only API for meeting records."""
-    queryset = Meeting.objects.all()
     serializer_class = MeetingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Meeting.objects.all()
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        self._mask_confidential_fields(request, response)
+        return response
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        self._mask_confidential_fields(request, response)
+        return response
+
+    def _mask_confidential_fields(self, request, response):
+        """Mask agenda, minutes, and action_points for callers without
+        ``can_read_confidential_meetings`` permission — the same masking
+        the web dashboard applies."""
+        profile = getattr(request.user, 'employee_profile', None)
+        perms = getattr(profile, 'permissions', None) if profile else None
+
+        if perms and perms.can_read_confidential_meetings:
+            return  # Full access — nothing to mask
+
+        masked = 'Confidential - Access Restricted'
+        confidential_fields = ('agenda', 'minutes', 'action_points')
+
+        data = response.data
+        # Paginated results nest the list under 'results'
+        items = data.get('results', data) if isinstance(data, dict) else data
+
+        if isinstance(items, list):
+            for item in items:
+                for field in confidential_fields:
+                    if field in item:
+                        item[field] = masked
+        elif isinstance(items, dict):
+            for field in confidential_fields:
+                if field in items:
+                    items[field] = masked
 
 
-class TaskViewSet(TenantReadOnlyViewSet):
-    """Read-only API for task records."""
-    queryset = Task.objects.all()
+class TaskViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only API for task records.
+
+    Access control (mirrors ``checklist_supervisor_view`` / dashboard):
+      - ``checklist_approve_scope == 'all'``:  all tasks.
+      - ``checklist_approve_scope == 'own_team'``:  tasks assigned to
+        the caller's direct reports.
+      - Everyone else: only their own tasks.
+    """
+
     serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        profile = getattr(user, 'employee_profile', None)
+        perms = getattr(profile, 'permissions', None) if profile else None
+
+        if perms and perms.can_approve_checklist_items:
+            if perms.checklist_approve_scope == 'all':
+                return Task.objects.all()
+            if perms.checklist_approve_scope == 'own_team':
+                subordinate_ids = list(
+                    Employee.objects.filter(supervisor=profile)
+                    .values_list('id', flat=True)
+                )
+                return Task.objects.filter(assigned_to__id__in=subordinate_ids)
+
+        # Base role: own tasks only
+        if profile:
+            return Task.objects.filter(assigned_to=profile)
+        return Task.objects.none()
 
 
-class TaskChecklistViewSet(TenantReadOnlyViewSet):
-    """Read-only API for checklist records with a secure mark_completed action."""
-    queryset = TaskChecklist.objects.all()
+class TaskChecklistViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only API for checklist records with a secure mark_completed action.
+
+    Access control (mirrors ``checklist_supervisor_view``):
+      - ``checklist_approve_scope == 'all'``:  all checklist items.
+      - ``checklist_approve_scope == 'own_team'``:  items assigned to
+        the caller's direct reports.
+      - Everyone else: only items assigned to themselves.
+    """
+
     serializer_class = TaskChecklistSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        profile = getattr(user, 'employee_profile', None)
+        perms = getattr(profile, 'permissions', None) if profile else None
+
+        if perms and perms.can_approve_checklist_items:
+            if perms.checklist_approve_scope == 'all':
+                return TaskChecklist.objects.all()
+            if perms.checklist_approve_scope == 'own_team':
+                subordinate_ids = list(
+                    Employee.objects.filter(supervisor=profile)
+                    .values_list('id', flat=True)
+                )
+                return TaskChecklist.objects.filter(
+                    assigned_to__id__in=subordinate_ids
+                )
+
+        # Base role: own items only
+        if profile:
+            return TaskChecklist.objects.filter(assigned_to=profile)
+        return TaskChecklist.objects.none()
 
     @action(detail=True, methods=['post'])
     def mark_completed(self, request, pk=None):

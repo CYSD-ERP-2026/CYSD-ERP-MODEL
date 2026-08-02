@@ -4,9 +4,9 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from drf_yasg.views import get_schema_view
+from rest_framework import permissions
 
 from tracker import views as tracker_views
 
@@ -27,10 +27,10 @@ urlpatterns = [
     path('accounts/', include('django.contrib.auth.urls')),
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
     path('dashboard/', include('tracker.urls')),
-    
+
     # API endpoints
     path('api/v1/', include('tracker.api.urls')),
-    
+
     # API Documentation
     path('api/docs/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

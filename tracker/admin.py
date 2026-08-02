@@ -13,7 +13,6 @@ and review from the Django admin is quick and ergonomic.
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -24,15 +23,11 @@ from .models import (
     Employee,
     EmployeePermission,
     EmployeeStats,
-
     Meeting,
     Project,
     Task,
     TaskChecklist,
 )
-
-
-
 
 # ===========================================================================
 # Domain Admin

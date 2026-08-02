@@ -18,7 +18,8 @@ from .models import (
     Meeting,
     Project,
     Task,
-    TaskChecklist)
+    TaskChecklist,
+)
 
 CACHE_TTL_SECONDS = 300
 
@@ -185,7 +186,7 @@ def export_meetings_csv(request):
     """Stream all meetings as a CSV download for founder reporting."""
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
-    
+
     if not perms or not (perms.can_read_confidential_meetings or getattr(perms, 'can_manage_organization', False)):
         return HttpResponseForbidden("You do not have permission to export meetings.")
 
@@ -247,7 +248,7 @@ def employees_list_view(request):
     employee_filter = EmployeeFilter(request.GET, queryset=qs, request=request)
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
-    
+
     context = {
         'filter': employee_filter,
         'employees': employee_filter.qs,
@@ -256,9 +257,11 @@ def employees_list_view(request):
     return render(request, 'employees.html', context)
 
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_http_methods
+
 from .models import EmployeePermission
+
 
 @login_required
 @ratelimit(key_prefix='update_perms', limit=10, period=60)
@@ -267,7 +270,7 @@ def update_employee_permissions(request, emp_id):
     caller_profile = getattr(request.user, 'employee_profile', None)
     if not caller_profile:
         return JsonResponse({'error': 'You must be an employee to do this.'}, status=403)
-        
+
     caller_perms = getattr(caller_profile, 'permissions', None)
     if not caller_perms or not caller_perms.can_manage_employees:
         return JsonResponse({'error': 'You do not have permission to manage employees.'}, status=403)
@@ -279,7 +282,7 @@ def update_employee_permissions(request, emp_id):
 
     try:
         data = json.loads(request.body)
-        
+
         allowed_fields = [
             'can_manage_employees',
             'can_manage_organization',
@@ -293,14 +296,14 @@ def update_employee_permissions(request, emp_id):
             'checklist_approve_scope',
             'analytics_scope',
         ]
-        
+
         for field in allowed_fields:
             if field in data:
                 if field in ['checklist_assign_scope', 'checklist_approve_scope', 'analytics_scope']:
                     if data[field] not in ['none', 'own_team', 'all']:
                         return JsonResponse({'error': f'Invalid value for {field}.'}, status=400)
                 setattr(target_perms, field, data[field])
-                
+
         target_perms.save()
         return JsonResponse({'success': True})
     except json.JSONDecodeError:
@@ -319,7 +322,7 @@ def meetings_list_view(request):
 
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
-    
+
     qs = (
         Meeting.objects.filter()
         .select_related('domain')
@@ -330,7 +333,7 @@ def meetings_list_view(request):
     # Filter meetings visibility: Only Superusers and those who can manage organization (Founder/Admin)
     # can see all meetings. Others can only see meetings they are attending.
     can_see_all_meetings = request.user.is_superuser or (perms and perms.can_manage_organization)
-    
+
     if not can_see_all_meetings and profile:
         qs = qs.filter(attendees=profile).distinct()
 
@@ -353,7 +356,7 @@ def meetings_list_view(request):
         # We consider Supervisor and above to be those who can approve or assign checklist items
         # or manage organization
         can_create_meeting = perms.can_assign_checklist_items or perms.can_manage_organization
-        
+
     context = {
         'filter': meeting_filter,
         'meetings': meetings,
@@ -651,7 +654,7 @@ def dev_role_switch_view(request, role_name):
             designation="Dev Masquerade Profile",
             is_active=True)
     else:
-        profile = user.employee_profile
+        pass  # profile already exists, nothing to do
 
     # Django's login() requires a backend attribute when called outside of
     # the standard authenticate() flow – set it explicitly.
@@ -753,7 +756,7 @@ def my_tasks_view(request):
     from datetime import timedelta
     today = timezone.now().date()
     end_of_week = today + timedelta(days=7)
-    
+
     from .models import Meeting
     meetings_this_week = Meeting.objects.filter(
         attendees=profile,
@@ -772,7 +775,7 @@ def my_tasks_view(request):
         'overdue_tasks': comb_overdue,
         'total_hours': total_hours,
         'pct': pct,
-        
+
         'meetings_this_week': meetings_this_week,
     }
     return render(request, 'my_tasks.html', context)
@@ -970,11 +973,12 @@ def checklist_create_view(request):
     Phase 1 — Supervisor assigns a new checklist item directly from the frontend.
     """
     from django.contrib import messages
-    from django.shortcuts import redirect
-    from .models import TaskChecklist, Employee
     from django.core.exceptions import ValidationError
     from django.http import HttpResponseForbidden
-    
+    from django.shortcuts import redirect
+
+    from .models import Employee, TaskChecklist
+
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
 
@@ -992,12 +996,12 @@ def checklist_create_view(request):
 
         try:
             assigned_to = Employee.objects.get(pk=assigned_to_id)
-            
+
             # Scope check
             if perms.checklist_assign_scope == 'own_team' and assigned_to.supervisor_id != profile.pk:
                 messages.error(request, "You can only assign tasks to your direct reports.")
                 return redirect('tracker:checklist_supervisor')
-                
+
             try:
                 TaskChecklist.objects.create(
                     title=title,
@@ -1006,10 +1010,10 @@ def checklist_create_view(request):
                     created_by=profile,
                     status='PENDING'
                 )
-                
+
                 from tracker.models import EmployeeStats
                 EmployeeStats.recalculate_for(assigned_to)
-                
+
                 messages.success(request, f"Task '{title}' assigned to {assigned_to.name} successfully.")
             except ValidationError as e:
                 # Convert the error dict to a list of messages or a single string
@@ -1017,7 +1021,7 @@ def checklist_create_view(request):
                 messages.error(request, f"Validation Error: {error_msg}")
         except Employee.DoesNotExist:
             messages.error(request, "Invalid employee selected.")
-            
+
     return redirect('tracker:checklist_supervisor')
 
 @login_required
@@ -1026,11 +1030,12 @@ def meeting_create_view(request):
     Creates a new meeting from the frontend.
     Restricted to supervisor and above.
     """
+
     from django.contrib import messages
-    from django.shortcuts import redirect
-    from .models import Meeting, Domain, Employee
     from django.http import HttpResponseForbidden
-    from datetime import datetime
+    from django.shortcuts import redirect
+
+    from .models import Domain, Employee, Meeting
 
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
@@ -1058,7 +1063,7 @@ def meeting_create_view(request):
 
         try:
             domain = Domain.objects.get(pk=domain_id) if domain_id else None
-            
+
             # Create the meeting
             meeting = Meeting(
                 title=title,
@@ -1071,14 +1076,14 @@ def meeting_create_view(request):
                 agenda=agenda,
                 organised_by=profile.name if profile else request.user.username
             )
-            
+
             if start_time_str:
                 meeting.start_time = start_time_str
             if end_time_str:
                 meeting.end_time = end_time_str
-                
+
             meeting.save()
-            
+
             # Add attendees
             if attendee_ids:
                 attendees = Employee.objects.filter(id__in=attendee_ids)
