@@ -34,15 +34,12 @@ def update_employee_stats_on_completion(sender, instance, created, **kwargs):
 DEFAULT_PERMISSIONS = {
     'can_manage_employees': False,
     'can_manage_organization': False,
-    'can_view_advanced_analytics': False,
     'can_assign_checklist_items': False,
     'can_approve_checklist_items': False,
     'can_read_confidential_meetings': True,
-    'can_log_hours': True,
     'can_access_admin_panel': False,
     'checklist_assign_scope': 'none',
     'checklist_approve_scope': 'none',
-    'analytics_scope': 'none',
 }
 
 @receiver(post_save, sender=Employee)

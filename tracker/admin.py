@@ -159,16 +159,13 @@ class EmployeePermissionInline(TabularInline):
         # Boolean flags
         'can_manage_employees',
         'can_manage_organization',
-        'can_view_advanced_analytics',
         'can_assign_checklist_items',
         'can_approve_checklist_items',
         'can_read_confidential_meetings',
-        'can_log_hours',
         'can_access_admin_panel',
         # Scope selectors
         'checklist_assign_scope',
         'checklist_approve_scope',
-        'analytics_scope',
     )
 
     def has_add_permission(self, request, obj=None):
@@ -379,7 +376,7 @@ class ProjectAdmin(ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(ModelAdmin):
-    list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge', 'hours_logged')
+    list_display = ('title', 'project', 'display_assigned_to', 'due_date', 'status_badge')
     list_filter = ('status', 'project', 'assigned_to', 'due_date')
     search_fields = ('title', 'project__title', 'assigned_to__name')
     autocomplete_fields = ('project', 'assigned_to')
@@ -392,7 +389,7 @@ class TaskAdmin(ModelAdmin):
 
     fieldsets = (
         ('Task details', {
-            'fields': ('title', 'project', 'assigned_to', 'status', 'hours_logged'),
+            'fields': ('title', 'project', 'assigned_to', 'status'),
         }),
         ('Schedule', {
             'fields': ('due_date',),

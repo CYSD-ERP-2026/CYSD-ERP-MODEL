@@ -11,8 +11,6 @@ urlpatterns = [
     path('employees/<int:emp_id>/permissions/', views.update_employee_permissions, name='update_permissions'),
     path('meetings/', views.meetings_list_view, name='meetings'),
     path('meetings/create/', views.meeting_create_view, name='meeting_create'),
-    path('analytics/', views.policy_analytics_view, name='analytics'),
-    path('employee-analytics/', views.employee_performance_view, name='employee_analytics'),
     path('my-tasks/', views.my_tasks_view, name='my_tasks'),
     path('export/', views.export_meetings_csv, name='export_meetings_csv'),
 

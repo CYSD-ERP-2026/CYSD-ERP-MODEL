@@ -286,20 +286,17 @@ def update_employee_permissions(request, emp_id):
         allowed_fields = [
             'can_manage_employees',
             'can_manage_organization',
-            'can_view_advanced_analytics',
             'can_assign_checklist_items',
             'can_approve_checklist_items',
             'can_read_confidential_meetings',
-            'can_log_hours',
             'can_access_admin_panel',
             'checklist_assign_scope',
             'checklist_approve_scope',
-            'analytics_scope',
         ]
 
         for field in allowed_fields:
             if field in data:
-                if field in ['checklist_assign_scope', 'checklist_approve_scope', 'analytics_scope']:
+                if field in ['checklist_assign_scope', 'checklist_approve_scope']:
                     if data[field] not in ['none', 'own_team', 'all']:
                         return JsonResponse({'error': f'Invalid value for {field}.'}, status=400)
                 setattr(target_perms, field, data[field])
@@ -365,220 +362,6 @@ def meetings_list_view(request):
         'all_employees': Employee.objects.filter(is_active=True).order_by('name') if can_create_meeting else [],
     }
     return render(request, 'meetings.html', context)
-
-
-@login_required
-def policy_analytics_view(request: HttpRequest) -> HttpResponse:
-    """View to analyze policy intervention scales using Pandas and Chart.js with caching."""
-    # Organization-wide analytics cached using aggregate meeting count and latest update token
-    meetings_count = Meeting.objects.filter().count()
-    latest_meeting = Meeting.objects.filter().aggregate(latest=Max('updated_at'))['latest']
-    latest_token = latest_meeting.isoformat() if latest_meeting else 'none'
-    cache_key = f"policy_analytics:{"default"}:{meetings_count}:{latest_token}"
-
-    context = cache.get(cache_key)
-    if context is not None:
-        return render(request, 'analytics.html', context)
-
-    # Query meetings (select_related for domain optimization)
-    meetings_qs = Meeting.objects.filter().select_related('domain').values(
-        'intervention_scale', 'domain__name'
-    )
-
-    # Load into a Pandas DataFrame
-    df = pd.DataFrame(list(meetings_qs))
-
-    if df.empty:
-        chart_data_json = "{}"
-        crosstab_html = "<p class='text-muted'>No data available for analysis.</p>"
-    else:
-        # Fill missing values if any domain is None
-        df['domain__name'] = df['domain__name'].fillna('Unassigned')
-
-        # Human-readable labels for intervention scales
-        scale_labels = dict(Meeting._meta.get_field('intervention_scale').choices)
-        df['intervention_scale_label'] = df['intervention_scale'].map(scale_labels).fillna(df['intervention_scale'])
-
-        # Generate crosstab: intervention_scale vs domain__name
-        crosstab = pd.crosstab(df['intervention_scale_label'], df['domain__name'])
-
-        # Reindex to ensure correct choice ordering on the chart and table
-        scale_choices = Meeting._meta.get_field('intervention_scale').choices
-        scale_display_names = [choice[1] for choice in scale_choices]
-        crosstab = crosstab.reindex(scale_display_names, fill_value=0)
-
-        # Render crosstab to HTML table with clean Bootstrap classes
-        crosstab_html = crosstab.to_html(classes='table table-borderless table-hover table-sm align-middle mb-0')
-
-        # ── Premium palette for domains ──
-        PREMIUM_PALETTE = [
-            '#2563eb', '#0891b2', '#0d9488', '#7c3aed',
-            '#db2777', '#ea580c', '#65a30d', '#ca8a04',
-        ]
-
-        # Build datasets list for Chart.js
-        chart_datasets = []
-        for idx, col_name in enumerate(crosstab.columns):
-            chart_datasets.append({
-                'label': col_name,
-                'data': [int(val) for val in crosstab[col_name]],
-                'backgroundColor': PREMIUM_PALETTE[idx % len(PREMIUM_PALETTE)],
-                'borderRadius': 4,
-            })
-
-        chart_data = {
-            'labels': scale_display_names,
-            'datasets': chart_datasets
-        }
-        chart_data_json = json.dumps(chart_data)
-
-    context = {
-        'chart_data_json': chart_data_json,
-        'crosstab_html': crosstab_html,
-    }
-
-    cache.set(cache_key, context, CACHE_TTL_SECONDS)
-    return render(request, 'analytics.html', context)
-
-
-@login_required
-def employee_performance_view(request: HttpRequest) -> HttpResponse:
-    """View to analyze employee workloads and task efficiency using Chart.js with caching and prefetch."""
-    profile = getattr(request.user, 'employee_profile', None)
-
-    # Determine analytics scope from permissions
-    perms = getattr(profile, 'permissions', None) if profile else None
-    if perms and perms.can_view_advanced_analytics:
-        analytics_scope = perms.analytics_scope  # 'all', 'own_team', or 'none'
-    else:
-        analytics_scope = 'none'  # own data only
-
-    # Generate a secure cache fingerprint incorporating:
-    # 1. Analytics scope & user ID (for Row-Level Security)
-    # 2. Total active tasks & latest update
-    # 3. Total active projects & latest update
-    tasks_count = Task.objects.filter().count()
-    latest_task_update = Task.objects.filter().aggregate(latest=Max('updated_at'))['latest']
-    latest_task_token = latest_task_update.isoformat() if latest_task_update else 'none'
-
-    projects_count = Project.objects.filter().count()
-    latest_proj_update = Project.objects.filter().aggregate(latest=Max('updated_at'))['latest']
-    latest_proj_token = latest_proj_update.isoformat() if latest_proj_update else 'none'
-
-    cache_key = (
-        f"emp_perf:{"default"}:{analytics_scope}:{request.user.id}:"
-        f"{tasks_count}:{latest_task_token}:"
-        f"{projects_count}:{latest_proj_token}"
-    )
-
-    context = cache.get(cache_key)
-    if context is not None:
-        return render(request, 'employee_analytics.html', context)
-
-    # Enforce Row-Level Security: Filter base querysets based on analytics_scope
-    if analytics_scope == 'all':
-        tasks_qs = Task.objects.filter()
-        employees_base_qs = Employee.objects.filter(is_active=True)
-    elif analytics_scope == 'own_team':
-        tasks_qs = Task.objects.filter(assigned_to__supervisor=profile)
-        employees_base_qs = Employee.objects.filter(supervisor=profile, is_active=True)
-    else:
-        allowed_ids = [profile.id] if profile else []
-        tasks_qs = Task.objects.filter(assigned_to__in=allowed_ids)
-        employees_base_qs = Employee.objects.filter(id__in=allowed_ids, is_active=True)
-
-    # 1. Workload Chart: Active tasks per employee
-    # Run aggregation for workload chart counts
-    emp_workloads = (
-        employees_base_qs
-        .annotate(active_tasks_count=Count('tasks', filter=Q(tasks__status__in=['pending', 'in_progress'])))
-        .filter(active_tasks_count__gt=0)
-        .order_by('-active_tasks_count')
-    )
-
-    workload_labels = [emp.name for emp in emp_workloads]
-    workload_counts = [emp.active_tasks_count for emp in emp_workloads]
-    workload_json = json.dumps({
-        'labels': workload_labels,
-        'data': workload_counts
-    })
-
-    # 2. Efficiency Chart: Completed vs Overdue
-    completed_count = tasks_qs.filter(status='completed').count()
-    overdue_count = tasks_qs.filter(status='overdue').count()
-
-    efficiency_percentage = 0.0
-    if completed_count + overdue_count > 0:
-        efficiency_percentage = (completed_count / (completed_count + overdue_count)) * 100
-
-    efficiency_json = json.dumps({
-        'labels': ['Completed', 'Overdue'],
-        'data': [completed_count, overdue_count]
-    })
-
-    # 3. Optimized Employee Registry Table Data (N+1 query resolution)
-    # Prefetch led_projects and tasks to process them in-memory
-    employees = (
-        employees_base_qs
-        .select_related('domain')
-        .prefetch_related('led_projects', 'tasks')
-        .order_by('name')
-    )
-
-    employees_data = []
-    for emp in employees:
-        # Resolve metrics in memory to prevent N+1 hits
-        led_projects = list(emp.led_projects.all())
-        emp_tasks = list(emp.tasks.all())
-
-        active_projects_led = sum(1 for p in led_projects if p.status == 'active')
-        active_tasks_count = sum(1 for t in emp_tasks if t.status in ['pending', 'in_progress'])
-
-        # Deadlines in memory
-        deadlines = []
-        upcoming_tasks = [t for t in emp_tasks if t.status in ['pending', 'in_progress', 'overdue']]
-        if upcoming_tasks:
-            upcoming_tasks.sort(key=lambda x: x.due_date)
-            nearest_task = upcoming_tasks[0]
-            deadlines.append((nearest_task.due_date, f"Task: {nearest_task.title}"))
-
-        upcoming_projects = [p for p in led_projects if p.status in ['planning', 'active']]
-        if upcoming_projects:
-            upcoming_projects.sort(key=lambda x: x.deadline)
-            nearest_project = upcoming_projects[0]
-            deadlines.append((nearest_project.deadline, f"Project: {nearest_project.title}"))
-
-        if deadlines:
-            deadlines.sort(key=lambda x: x[0])
-            nearest_date, nearest_desc = deadlines[0]
-            deadline_display = f"{nearest_date.strftime('%d %b %Y')} ({nearest_desc})"
-        else:
-            deadline_display = "No upcoming deadlines"
-
-        employees_data.append({
-            'employee': emp,
-            'active_projects_led': active_projects_led,
-            'active_tasks': active_tasks_count,
-            'upcoming_deadline': deadline_display,
-        })
-
-    context = {
-        'workload_json': workload_json,
-        'efficiency_json': efficiency_json,
-        'has_workload_data': len(workload_labels) > 0,
-        'has_efficiency_data': (completed_count + overdue_count) > 0,
-        'efficiency_percentage': round(efficiency_percentage, 1),
-        'employees_data': employees_data,
-    }
-
-    cache.set(cache_key, context, CACHE_TTL_SECONDS)
-    return render(request, 'employee_analytics.html', context)
-
-
-
-
-
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dev Mode: Role Masquerade View
@@ -689,9 +472,6 @@ def my_tasks_view(request):
     completed_tasks = tasks.filter(status='completed').count()
     overdue_tasks = tasks.filter(status='overdue').count()
 
-    # Calculate total hours logged
-    total_hours = sum(t.hours_logged for t in tasks)
-
     # Get checklist items assigned to this employee
     checklists = TaskChecklist.objects.filter(assigned_to=profile).select_related('created_by').order_by('-created_at')
     unchecked_checklists = checklists.filter(status='PENDING')
@@ -722,7 +502,6 @@ def my_tasks_view(request):
             'date_label': 'Due Date',
             'date': t.due_date,
             'status': t.status,  # pending, in_progress, completed, overdue
-            'hours_logged': f"{t.hours_logged} hrs",
             'creator': None,
         })
 
@@ -742,7 +521,6 @@ def my_tasks_view(request):
             'date_label': 'Created Date',
             'date': item.created_at.date() if item.created_at else timezone.now().date(),
             'status': status_map.get(item.status, 'pending'),
-            'hours_logged': '—',
             'creator': item.created_by.name if item.created_by else 'System',
             'is_self_allocated': item.is_self_allocated,
             'rejection_feedback': item.rejection_feedback,
@@ -777,7 +555,6 @@ def my_tasks_view(request):
         'awaiting_tasks': comb_awaiting,
         'overdue_tasks': comb_overdue,
         'self_allocated_count': self_allocated_count,
-        'total_hours': total_hours,
         'pct': pct,
 
         'meetings_this_week': meetings_this_week,

@@ -435,12 +435,6 @@ class Task(models.Model):
         default='pending',
         db_index=True
     )
-    hours_logged = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0.0,
-        help_text="Hours logged on this task"
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -726,10 +720,6 @@ class EmployeePermission(models.Model):
         default=False,
         help_text='Can edit enterprise / organisation settings',
     )
-    can_view_advanced_analytics = models.BooleanField(
-        default=False,
-        help_text='Can access the employee-performance analytics page',
-    )
     can_assign_checklist_items = models.BooleanField(
         default=False,
         help_text='Can create TaskChecklist items and assign them to employees',
@@ -742,10 +732,6 @@ class EmployeePermission(models.Model):
         default=False,
         help_text='Can view full meeting agenda, minutes, and action points '
                   '(when False, these fields are masked)',
-    )
-    can_log_hours = models.BooleanField(
-        default=False,
-        help_text='Can log hours on tasks assigned to them',
     )
     can_access_admin_panel = models.BooleanField(
         default=False,
@@ -767,13 +753,6 @@ class EmployeePermission(models.Model):
         default='none',
         help_text="'none' = cannot approve, 'own_team' = direct reports only, "
                   "'all' = any employee in the enterprise",
-    )
-    analytics_scope = models.CharField(
-        max_length=10,
-        choices=PERMISSION_SCOPE_CHOICES,
-        default='none',
-        help_text="'none' = own data only, 'own_team' = own direct reports, "
-                  "'all' = entire enterprise",
     )
 
     class Meta:
