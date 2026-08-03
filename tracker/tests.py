@@ -998,3 +998,109 @@ class APITaskChecklistViewSetTests(TestCase):
         ids = {r['id'] for r in results}
         self.assertIn(self.item_sub.pk, ids)
         self.assertIn(self.item_other.pk, ids)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. Self-Task Allocation Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class SelfTaskAllocationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="emp_selftask", password="password")
+        self.employee = Employee.objects.create(
+            user=self.user,
+            name="Self Task Employee",
+            email="selftask@example.com",
+            employee_id="EMPST001"
+        )
+        # EmployeePermission is auto-created by signal
+
+    def test_create_self_task_success(self):
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.post('/dashboard/self-task/create/', {
+            'title': 'My Proactive Task',
+            'description': 'Working on self-assigned item'
+        })
+        self.assertEqual(response.status_code, 302)
+
+        item = TaskChecklist.objects.get(title='My Proactive Task')
+        self.assertTrue(item.is_self_allocated)
+        self.assertEqual(item.assigned_to, self.employee)
+        self.assertEqual(item.created_by, self.employee)
+        self.assertEqual(item.status, 'PENDING')
+
+    def test_create_self_task_requires_title(self):
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.post('/dashboard/self-task/create/', {
+            'title': '',
+            'description': 'No title'
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TaskChecklist.objects.count(), 0)
+
+    def test_create_self_task_get_not_allowed(self):
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.get('/dashboard/self-task/create/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_my_tasks_view_includes_self_allocated_count_and_flag(self):
+        TaskChecklist.objects.create(
+            title='Self Task Item',
+            description='Desc',
+            assigned_to=self.employee,
+            created_by=self.employee,
+            is_self_allocated=True,
+            status='PENDING'
+        )
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.get('/dashboard/my-tasks/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['self_allocated_count'], 1)
+        unified = response.context['unified_list']
+        self.assertTrue(any(item.get('is_self_allocated') is True for item in unified))
+
+    def test_self_allocated_bypasses_assign_permission_check(self):
+        """Self-allocated items should bypass the can_assign_checklist_items
+        validation in TaskChecklist.clean()."""
+        # Employee has no assignment permissions, but self-allocation should work
+        item = TaskChecklist(
+            title='Self-assigned without permission',
+            assigned_to=self.employee,
+            created_by=self.employee,
+            is_self_allocated=True,
+        )
+        # This should NOT raise ValidationError
+        item.save()
+        self.assertIsNotNone(item.pk)
+        self.assertTrue(item.is_self_allocated)
+
+    def test_self_allocated_appears_in_supervisor_verification_center(self):
+        """Self-allocated items in AWAITING_VERIFICATION should appear in
+        the supervisor's verification center for approval."""
+        # Create supervisor
+        sup_user = User.objects.create_user(username="sup_sa", password="password")
+        supervisor = Employee.objects.create(
+            user=sup_user, name="Supervisor SA", employee_id="SUP-SA",
+            email="sup_sa@test.com",
+        )
+        supervisor.permissions.can_approve_checklist_items = True
+        supervisor.permissions.checklist_approve_scope = "own_team"
+        supervisor.permissions.save()
+
+        # Make employee a subordinate
+        self.employee.supervisor = supervisor
+        self.employee.save()
+
+        # Create a self-allocated item awaiting verification
+        TaskChecklist.objects.create(
+            title='Self-task for review',
+            assigned_to=self.employee,
+            created_by=self.employee,
+            is_self_allocated=True,
+            status='AWAITING_VERIFICATION',
+        )
+
+        self.client.login(username="sup_sa", password="password")
+        response = self.client.get('/dashboard/checklist/verify/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['awaiting_count'], 1)

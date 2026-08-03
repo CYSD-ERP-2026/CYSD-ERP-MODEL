@@ -704,6 +704,7 @@ def my_tasks_view(request):
     comb_pending = pending_tasks + in_progress_tasks + unchecked_checklists.count()
     comb_awaiting = awaiting_checklists.count()
     comb_overdue = overdue_tasks
+    self_allocated_count = checklists.filter(is_self_allocated=True).count()
 
     pct = round((comb_completed / comb_total) * 100) if comb_total > 0 else 0
 
@@ -743,6 +744,8 @@ def my_tasks_view(request):
             'status': status_map.get(item.status, 'pending'),
             'hours_logged': '—',
             'creator': item.created_by.name if item.created_by else 'System',
+            'is_self_allocated': item.is_self_allocated,
+            'rejection_feedback': item.rejection_feedback,
         })
 
     # Sort unified list: active/pending items first, completed items at the bottom
@@ -773,6 +776,7 @@ def my_tasks_view(request):
         'pending_tasks': comb_pending,
         'awaiting_tasks': comb_awaiting,
         'overdue_tasks': comb_overdue,
+        'self_allocated_count': self_allocated_count,
         'total_hours': total_hours,
         'pct': pct,
 
@@ -1096,3 +1100,47 @@ def meeting_create_view(request):
     return redirect('tracker:meetings')
 
 
+@login_required
+def create_self_task(request):
+    """
+    Self-Task Allocation — Employee creates a checklist item assigned to themselves.
+
+    This allows employees to proactively pick up work when seniors are busy.
+    The task is flagged as `is_self_allocated=True` and follows the normal
+    PENDING → AWAITING_VERIFICATION → COMPLETED lifecycle, routing through
+    the Senior Verification Center for approval.
+    """
+    from django.contrib import messages
+
+    profile = getattr(request.user, 'employee_profile', None)
+    if not profile:
+        return HttpResponseForbidden("No employee profile found.")
+
+    if request.method != 'POST':
+        return HttpResponseForbidden("POST required.")
+
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not title:
+        messages.error(request, "Task title is required.")
+        return redirect('tracker:my_tasks')
+
+    # Create a self-allocated checklist item — assigned_to == created_by == self
+    TaskChecklist.objects.create(
+        title=title,
+        description=description,
+        assigned_to=profile,
+        created_by=profile,
+        is_self_allocated=True,
+        status='PENDING',
+    )
+
+    # Recalculate stats to reflect the new item
+    EmployeeStats.recalculate_for(profile)
+
+    messages.success(
+        request,
+        f'✅ Self-task "{title}" created. Complete it and submit for verification.'
+    )
+    return redirect('tracker:my_tasks')

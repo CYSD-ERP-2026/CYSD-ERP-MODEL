@@ -23,6 +23,7 @@ urlpatterns = [
     path('checklist/verify/', views.checklist_supervisor_view, name='checklist_supervisor'),
     path('checklist/create/', views.checklist_create_view, name='checklist_create'),
     path('checklist/resolve/<int:item_id>/', views.checklist_resolve_view, name='checklist_resolve'),
+    path('self-task/create/', views.create_self_task, name='create_self_task'),
 
     # Dev-only masquerade endpoint – blocked in production by the view itself
     path('dev-switch/<str:role_name>/', views.dev_role_switch_view, name='dev_switch'),

@@ -506,6 +506,11 @@ class TaskChecklist(models.Model):
         related_name='created_checklist_items',
         help_text='Supervisor / founder who created this item',
     )
+    is_self_allocated = models.BooleanField(
+        default=False,
+        help_text='True when the employee created this task for themselves '
+                  '(self-task allocation)',
+    )
     status = models.CharField(
         max_length=30,
         choices=CHECKLIST_STATUS_CHOICES,
@@ -559,6 +564,11 @@ class TaskChecklist(models.Model):
 
         if self.created_by is None:
             return  # skip validation during programmatic creation without a creator
+
+        # Self-allocated items bypass assignment permission checks — the
+        # employee is assigning to themselves, not to a subordinate.
+        if self.is_self_allocated:
+            return
 
         perms = getattr(self.created_by, 'permissions', None)
 

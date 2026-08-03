@@ -10,6 +10,9 @@
     <span class="meta">Manage and track your assigned project deliverables, deadlines, and logged hours</span>
   </div>
   <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#selfTaskModal">
+      <i class="bi bi-plus-lg me-1"></i> Self-Allocate Task
+    </button>
     <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3 py-2">
       <i class="bi bi-person-badge me-1"></i>{{ profile.designation }}
     </span>
@@ -87,6 +90,17 @@
   </div>
 </div>
 
+{% if self_allocated_count %}
+<div class="card premium-card mb-4 p-3">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bi bi-person-plus-fill text-primary" style="font-size:1.2rem;"></i>
+    <span class="fw-semibold text-dark" style="font-size:.88rem;">Self-Allocated Tasks</span>
+    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2" style="font-size:.75rem;">{{ self_allocated_count }}</span>
+    <span class="text-muted" style="font-size:.78rem;">— tasks you created for yourself (pending senior verification)</span>
+  </div>
+</div>
+{% endif %}
+
 <!-- Task Table Card -->
 <div class="table-card">
   <div class="table-header">
@@ -141,9 +155,19 @@
               {% endif %}
               
               <div>
-                <div class="fw-semibold text-dark">{{ item.title }}</div>
+                <div class="fw-semibold text-dark">
+                  {{ item.title }}
+                  {% if item.is_self_allocated %}
+                    <span class="badge rounded-pill ms-1" style="background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;font-size:.65rem;vertical-align:middle;">Self-Allocated</span>
+                  {% endif %}
+                </div>
                 {% if item.is_checklist %}
-                  <small class="text-muted" style="font-size: 0.76rem;">Checklist Item #{{ item.id }}{% if item.creator %} · Assigned by {{ item.creator }}{% endif %}</small>
+                  <small class="text-muted" style="font-size: 0.76rem;">Checklist Item #{{ item.id }}{% if item.creator %} · {% if item.is_self_allocated %}Self-created{% else %}Assigned by {{ item.creator }}{% endif %}{% endif %}</small>
+                  {% if item.rejection_feedback %}
+                    <div class="mt-1 p-2 rounded" style="background:#fef2f2;border:1px solid #fecaca;font-size:.78rem;color:#991b1b;">
+                      <i class="bi bi-exclamation-circle me-1"></i><strong>Feedback:</strong> {{ item.rejection_feedback }}
+                    </div>
+                  {% endif %}
                   {% if item.description %}
                     <div class="text-muted small mt-1" style="font-size: 0.8rem; line-height: 1.4;">{{ item.description }}</div>
                   {% endif %}
@@ -250,6 +274,49 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+<!-- ── Self-Task Allocation Modal ── -->
+<div class="modal fade" id="selfTaskModal" tabindex="-1" aria-labelledby="selfTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:12px;border:1px solid #e2e8f0;">
+      <form method="post" action="{% url 'tracker:create_self_task' %}">
+        {% csrf_token %}
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="selfTaskModalLabel">
+            <i class="bi bi-person-plus-fill text-primary me-2"></i>Self-Allocate a Task
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3" style="font-size:.85rem;">
+            Create a task for yourself when your seniors are busy. The completed task will be routed to the
+            <strong>Senior Verification Center</strong> for approval.
+          </p>
+          <div class="mb-3">
+            <label for="selfTaskTitle" class="form-label fw-semibold">Task Title <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="selfTaskTitle" name="title" required
+                   placeholder="e.g., Draft Q3 field report for Keonjhar district">
+          </div>
+          <div class="mb-3">
+            <label for="selfTaskDesc" class="form-label fw-semibold">Description</label>
+            <textarea class="form-control" id="selfTaskDesc" name="description" rows="3"
+                      placeholder="Optional — acceptance criteria, notes, or context"></textarea>
+          </div>
+          <div class="p-2 rounded" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:.8rem;color:#166534;">
+            <i class="bi bi-info-circle me-1"></i>
+            This task will be assigned to <strong>you ({{ profile.name }})</strong> and flagged as self-allocated.
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light fw-semibold" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary fw-semibold">
+            <i class="bi bi-plus-lg me-1"></i>Create Task
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 

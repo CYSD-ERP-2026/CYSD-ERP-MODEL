@@ -88,6 +88,11 @@
                 <span class="badge rounded-pill" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;font-size:.72rem;">
                   Awaiting Approval
                 </span>
+                {% if item.is_self_allocated %}
+                <span class="badge rounded-pill" style="background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;font-size:.72rem;">
+                  Self-Allocated
+                </span>
+                {% endif %}
                 <span class="fw-bold text-dark fs-6">{{ item.title }}</span>
               </div>
               {% if item.description %}
@@ -186,7 +191,12 @@
               <i class="bi bi-person-fill text-secondary me-1"></i>{{ item.assigned_to.name }}
             </td>
             <td data-label="Checklist Title">
-              <div class="fw-semibold">{{ item.title }}</div>
+              <div class="fw-semibold">
+                {{ item.title }}
+                {% if item.is_self_allocated %}
+                  <span class="badge rounded-pill ms-1" style="background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;font-size:.65rem;vertical-align:middle;">Self-Allocated</span>
+                {% endif %}
+              </div>
               {% if item.description %}
                 <small class="text-muted text-truncate d-block" style="max-width: 250px;">{{ item.description }}</small>
               {% endif %}
