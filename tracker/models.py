@@ -332,6 +332,14 @@ class Meeting(models.Model):
     )
 
     # Metadata
+    organizer = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='organized_meetings',
+        help_text='Employee who called/organized this meeting'
+    )
     organised_by = models.CharField(
         max_length=150,
         blank=True,

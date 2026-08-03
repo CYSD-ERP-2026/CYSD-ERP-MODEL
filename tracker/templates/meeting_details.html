@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+
+<div class="topbar d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <a href="{% url 'tracker:meetings' %}" class="btn btn-sm btn-outline-secondary mb-2">
+            <i class="bi bi-arrow-left me-1"></i>Back to Meetings
+        </a>
+        <h4><i class="bi bi-calendar-event me-2"></i>{{ meeting.title }}</h4>
+        <span class="meta">
+            {{ meeting.date|date:"D, d M Y" }} 
+            {% if meeting.start_time %} · {{ meeting.start_time|time:"H:i" }}{% endif %}
+            {% if meeting.end_time %} - {{ meeting.end_time|time:"H:i" }}{% endif %}
+        </span>
+    </div>
+    <div>
+        <span class="badge badge-{{ meeting.status }} fs-6 rounded-pill px-3 py-2">
+            {{ meeting.get_status_display }}
+        </span>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Meeting Details & Participants -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 mb-4 rounded-3">
+            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                <h6 class="fw-bold text-uppercase mb-0 text-muted" style="letter-spacing: 0.5px;">Meeting Info</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush mt-2">
+                    <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
+                        <span class="text-muted"><i class="bi bi-diagram-3 me-2"></i>Domain</span>
+                        <span class="fw-medium">{{ meeting.domain.name|default:"Unassigned" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
+                        <span class="text-muted"><i class="bi bi-tags me-2"></i>Type</span>
+                        <span class="fw-medium">{{ meeting.get_meeting_type_display }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
+                        <span class="text-muted"><i class="bi bi-geo-alt me-2"></i>Scale</span>
+                        <span class="fw-medium">{{ meeting.get_intervention_scale_display }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
+                        <span class="text-muted"><i class="bi bi-geo me-2"></i>Venue</span>
+                        <span class="fw-medium">{{ meeting.venue|default:"TBD" }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                <h6 class="fw-bold text-uppercase mb-0 text-muted" style="letter-spacing: 0.5px;">Participants</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="text-muted small">Organised By:</span>
+                    <div class="fw-semibold mt-1">
+                        {% if meeting.organizer %}
+                            {{ meeting.organizer.name }}
+                        {% else %}
+                            {{ meeting.organised_by|default:"Unknown" }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <span class="text-muted small">Attendees:</span>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        {% for attendee in meeting.attendees.all %}
+                            <span class="badge bg-light text-dark border">{{ attendee.name }}</span>
+                        {% empty %}
+                            <span class="text-muted fst-italic">No attendees listed</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Document Editor (Minutes & Action Points) -->
+    <div class="col-lg-8">
+        <!-- Agenda Section (Read-only usually, or editable? Let's make it editable with minutes) -->
+        <div class="card shadow-sm border-0 mb-4 rounded-3">
+            <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Meeting Document</h5>
+                {% if can_edit_minutes %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-pencil me-1"></i>Editor Access</span>
+                {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"><i class="bi bi-eye me-1"></i>View Only</span>
+                {% endif %}
+            </div>
+            <div class="card-body p-4 bg-light">
+                <form method="POST" action="{% url 'tracker:meeting_details' meeting.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_minutes">
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" style="color:var(--cysd-navy);">Agenda / Objectives</label>
+                        {% if can_edit_minutes %}
+                            <textarea class="form-control" name="agenda" rows="3" placeholder="Meeting objectives...">{{ meeting_agenda }}</textarea>
+                        {% else %}
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_agenda|default:"<span class='text-muted fst-italic'>No agenda provided.</span>"|safe }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" style="color:var(--cysd-navy);">Minutes of the Meeting</label>
+                        {% if can_edit_minutes %}
+                            <textarea class="form-control" name="minutes" rows="8" placeholder="Record discussion points here...">{{ meeting_minutes }}</textarea>
+                        {% else %}
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 120px;">{{ meeting_minutes|default:"<span class='text-muted fst-italic'>No minutes recorded.</span>"|safe }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" style="color:var(--cysd-navy);">Action Points Summary</label>
+                        {% if can_edit_minutes %}
+                            <textarea class="form-control" name="action_points" rows="4" placeholder="Summarize key action points...">{{ meeting_action_points }}</textarea>
+                        {% else %}
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_action_points|default:"<span class='text-muted fst-italic'>No action points summary.</span>"|safe }}</div>
+                        {% endif %}
+                    </div>
+
+                    {% if can_edit_minutes %}
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                            <i class="bi bi-save me-1"></i>Save Document
+                        </button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        <!-- Task Allocation Section -->
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-primary"></i>Assign Tasks from Meeting</h5>
+            </div>
+            <div class="card-body p-4">
+                {% if can_edit_minutes %}
+                <div class="bg-white p-4 border rounded-3 mb-4 shadow-sm">
+                    <h6 class="fw-semibold mb-3">Create New Task</h6>
+                    <form method="POST" action="{% url 'tracker:meeting_details' meeting.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_task">
+                        
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label small text-muted">Task Title</label>
+                                <input type="text" name="task_title" class="form-control" required placeholder="e.g. Follow up with vendor">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted">Assign To</label>
+                                <select name="assigned_to" class="form-select" required>
+                                    <option value="" disabled selected>Select employee...</option>
+                                    {% for emp in all_employees %}
+                                        <option value="{{ emp.id }}">{{ emp.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small text-muted">Description & Context (Optional)</label>
+                                <textarea name="task_description" class="form-control" rows="2" placeholder="Details discussed in the meeting..."></textarea>
+                            </div>
+                            <div class="col-12 text-end mt-3">
+                                <button type="submit" class="btn btn-sm btn-outline-primary fw-semibold px-4">
+                                    <i class="bi bi-plus-circle me-1"></i>Assign Task
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+                
+                <h6 class="fw-bold mb-3 text-muted" style="letter-spacing: 0.5px; font-size: 0.85rem;">PREVIOUSLY ASSIGNED TASKS FROM THIS MEETING</h6>
+                
+                {% if tasks %}
+                <div class="list-group list-group-flush border rounded-3">
+                    {% for task in tasks %}
+                    <div class="list-group-item p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1 fw-semibold">{{ task.title }}</h6>
+                                <p class="mb-0 text-muted small text-truncate" style="max-width: 400px;">{{ task.description }}</p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-light text-dark border mb-1">
+                                    <i class="bi bi-person me-1"></i>{{ task.assigned_to.name }}
+                                </span>
+                                <br>
+                                {% if task.status == 'COMPLETED' %}
+                                    <span class="badge bg-success-subtle text-success">Completed</span>
+                                {% elif task.status == 'PENDING' %}
+                                    <span class="badge bg-warning-subtle text-warning">Pending</span>
+                                {% else %}
+                                    <span class="badge bg-info-subtle text-info">{{ task.status }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center p-4 bg-light rounded-3 border border-light">
+                    <p class="text-muted mb-0"><i class="bi bi-info-circle me-2"></i>No tasks have been assigned from this meeting yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

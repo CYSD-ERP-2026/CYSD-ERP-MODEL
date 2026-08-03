@@ -855,6 +855,7 @@ def meeting_create_view(request):
                 date=date_str,
                 venue=venue,
                 agenda=agenda,
+                organizer=profile,
                 organised_by=profile.name if profile else request.user.username
             )
 
@@ -921,3 +922,95 @@ def create_self_task(request):
         f'✅ Self-task "{title}" created. Complete it and submit for verification.'
     )
     return redirect('tracker:my_tasks')
+
+@login_required
+def meeting_details_view(request, meeting_id):
+    from django.shortcuts import get_object_or_404
+    from django.contrib import messages
+    from django.http import HttpResponseForbidden
+
+    meeting = get_object_or_404(Meeting, pk=meeting_id)
+    profile = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile, 'permissions', None) if profile else None
+
+    # Check read access
+    can_see_all_meetings = request.user.is_superuser or (perms and perms.can_manage_organization)
+    if not can_see_all_meetings and profile:
+        if not meeting.attendees.filter(id=profile.id).exists() and meeting.organizer != profile:
+            return HttpResponseForbidden("You do not have permission to view this meeting.")
+
+    is_erp_manager = perms and (perms.can_manage_organization or perms.can_manage_employees)
+    is_organizer = profile and meeting.organizer == profile
+    can_edit_minutes = is_erp_manager or is_organizer
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'update_minutes':
+            if not can_edit_minutes:
+                return HttpResponseForbidden("You do not have permission to edit meeting minutes.")
+            
+            meeting.minutes = request.POST.get('minutes', '')
+            meeting.action_points = request.POST.get('action_points', '')
+            meeting.save()
+            messages.success(request, "Meeting details updated successfully.")
+            return redirect('tracker:meeting_details', meeting_id=meeting.id)
+            
+        elif action == 'create_task':
+            if not can_edit_minutes:
+                return HttpResponseForbidden("You do not have permission to create tasks from this meeting.")
+                
+            task_title = request.POST.get('task_title', '').strip()
+            task_description = request.POST.get('task_description', '').strip()
+            assigned_to_id = request.POST.get('assigned_to')
+            
+            if not task_title or not assigned_to_id:
+                messages.error(request, "Task title and assignee are required.")
+            else:
+                try:
+                    assigned_to = Employee.objects.get(pk=assigned_to_id)
+                    description_with_link = f"Assigned from meeting: {meeting.title}\n\n{task_description}"
+                    TaskChecklist.objects.create(
+                        title=task_title,
+                        description=description_with_link,
+                        assigned_to=assigned_to,
+                        created_by=profile,
+                        status='PENDING'
+                    )
+                    # Recalculate stats
+                    EmployeeStats.recalculate_for(assigned_to)
+                    messages.success(request, f"Task '{task_title}' assigned to {assigned_to.name} successfully.")
+                except Employee.DoesNotExist:
+                    messages.error(request, "Invalid employee selected.")
+                except Exception as e:
+                    messages.error(request, f"Error creating task: {e}")
+            
+            return redirect('tracker:meeting_details', meeting_id=meeting.id)
+
+    # Mask confidential info if needed
+    confidential = not (perms and perms.can_read_confidential_meetings)
+    
+    if confidential:
+        meeting_agenda = 'Confidential - Access Restricted'
+        meeting_minutes = 'Confidential - Access Restricted'
+        meeting_action_points = 'Confidential - Access Restricted'
+    else:
+        meeting_agenda = meeting.agenda
+        meeting_minutes = meeting.minutes
+        meeting_action_points = meeting.action_points
+
+    all_employees = Employee.objects.filter(is_active=True).order_by('name') if can_edit_minutes else []
+    
+    tasks = TaskChecklist.objects.filter(description__icontains=f"Assigned from meeting: {meeting.title}").order_by('-created_at')
+
+    context = {
+        'meeting': meeting,
+        'can_edit_minutes': can_edit_minutes,
+        'all_employees': all_employees,
+        'meeting_agenda': meeting_agenda,
+        'meeting_minutes': meeting_minutes,
+        'meeting_action_points': meeting_action_points,
+        'confidential': confidential,
+        'tasks': tasks,
+    }
+    return render(request, 'meeting_details.html', context)
+
