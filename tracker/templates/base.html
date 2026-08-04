@@ -83,12 +83,12 @@
       <a href="{% url 'tracker:my_tasks' %}" class="{% if '/dashboard/my-tasks/' in request.path %}active{% endif %}">
         <i class="bi bi-list-task"></i> My Tasks
       </a>
-      {% if request.user.is_superuser or request.user.employee_profile.permissions.can_approve_checklist_items %}
+      {% if request.user.employee_profile.permissions.can_approve_checklist_items %}
       <a href="{% url 'tracker:checklist_supervisor' %}" class="{% if '/dashboard/checklist/verify/' in request.path %}active{% endif %}">
         <i class="bi bi-check2-square"></i> Verification Center
       </a>
       {% endif %}
-      {% if request.user.is_superuser or request.user.employee_profile.permissions.can_view_employee_analytics %}
+      {% if request.user.employee_profile.permissions.can_view_employee_analytics %}
       <a href="{% url 'tracker:employee_analytics' %}" class="{% if '/dashboard/analytics/' in request.path %}active{% endif %}">
         <i class="bi bi-graph-up"></i> Team Analytics
       </a>
