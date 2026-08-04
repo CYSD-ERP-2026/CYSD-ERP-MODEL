@@ -745,7 +745,11 @@ class EmployeePermission(models.Model):
         default=False,
         help_text='Grants is_staff + tracker app permissions on the linked User',
     )
-
+    can_self_assign_tasks = models.BooleanField(
+        default=False,
+        help_text='Can create self-allocated checklist tasks '
+                  '(employee picks up work proactively)',
+    )
 
     # ── Scope fields (3) ──
     checklist_assign_scope = models.CharField(

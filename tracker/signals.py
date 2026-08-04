@@ -38,6 +38,7 @@ DEFAULT_PERMISSIONS = {
     'can_approve_checklist_items': False,
     'can_read_confidential_meetings': True,
     'can_access_admin_panel': False,
+    'can_self_assign_tasks': True,
     'checklist_assign_scope': 'none',
     'checklist_approve_scope': 'none',
 }

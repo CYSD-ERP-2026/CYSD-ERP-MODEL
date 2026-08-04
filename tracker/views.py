@@ -1,12 +1,11 @@
 import csv
 import json
 
-import pandas as pd
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -16,7 +15,6 @@ from .models import (
     Employee,
     EmployeeStats,
     Meeting,
-    Project,
     Task,
     TaskChecklist,
 )
@@ -290,6 +288,7 @@ def update_employee_permissions(request, emp_id):
             'can_approve_checklist_items',
             'can_read_confidential_meetings',
             'can_access_admin_panel',
+            'can_self_assign_tasks',
             'checklist_assign_scope',
             'checklist_approve_scope',
         ]
@@ -887,6 +886,12 @@ def create_self_task(request):
     The task is flagged as `is_self_allocated=True` and follows the normal
     PENDING → AWAITING_VERIFICATION → COMPLETED lifecycle, routing through
     the Senior Verification Center for approval.
+
+    Guards:
+        1. can_self_assign_tasks permission must be True.
+        2. profile.supervisor must be set — otherwise there is no supervisor
+           to route the verification to, and the item would silently sit
+           unreviewed.
     """
     from django.contrib import messages
 
@@ -894,8 +899,25 @@ def create_self_task(request):
     if not profile:
         return HttpResponseForbidden("No employee profile found.")
 
+    # ── Permission gate ──
+    perms = getattr(profile, 'permissions', None)
+    if not perms or not perms.can_self_assign_tasks:
+        return HttpResponseForbidden(
+            "You do not have permission to create self-assigned tasks."
+        )
+
     if request.method != 'POST':
         return HttpResponseForbidden("POST required.")
+
+    # ── Supervisor guard ──
+    if profile.supervisor is None:
+        messages.error(
+            request,
+            "You cannot create a self-task because you do not have a "
+            "supervisor assigned. Self-allocated tasks require a supervisor "
+            "for the verification workflow. Please contact your administrator."
+        )
+        return redirect('tracker:my_tasks')
 
     title = request.POST.get('title', '').strip()
     description = request.POST.get('description', '').strip()
@@ -925,9 +947,9 @@ def create_self_task(request):
 
 @login_required
 def meeting_details_view(request, meeting_id):
-    from django.shortcuts import get_object_or_404
     from django.contrib import messages
     from django.http import HttpResponseForbidden
+    from django.shortcuts import get_object_or_404
 
     meeting = get_object_or_404(Meeting, pk=meeting_id)
     profile = getattr(request.user, 'employee_profile', None)
@@ -948,21 +970,21 @@ def meeting_details_view(request, meeting_id):
         if action == 'update_minutes':
             if not can_edit_minutes:
                 return HttpResponseForbidden("You do not have permission to edit meeting minutes.")
-            
+
             meeting.minutes = request.POST.get('minutes', '')
             meeting.action_points = request.POST.get('action_points', '')
             meeting.save()
             messages.success(request, "Meeting details updated successfully.")
             return redirect('tracker:meeting_details', meeting_id=meeting.id)
-            
+
         elif action == 'create_task':
             if not can_edit_minutes:
                 return HttpResponseForbidden("You do not have permission to create tasks from this meeting.")
-                
+
             task_title = request.POST.get('task_title', '').strip()
             task_description = request.POST.get('task_description', '').strip()
             assigned_to_id = request.POST.get('assigned_to')
-            
+
             if not task_title or not assigned_to_id:
                 messages.error(request, "Task title and assignee are required.")
             else:
@@ -983,12 +1005,12 @@ def meeting_details_view(request, meeting_id):
                     messages.error(request, "Invalid employee selected.")
                 except Exception as e:
                     messages.error(request, f"Error creating task: {e}")
-            
+
             return redirect('tracker:meeting_details', meeting_id=meeting.id)
 
     # Mask confidential info if needed
     confidential = not (perms and perms.can_read_confidential_meetings)
-    
+
     if confidential:
         meeting_agenda = 'Confidential - Access Restricted'
         meeting_minutes = 'Confidential - Access Restricted'
@@ -999,7 +1021,7 @@ def meeting_details_view(request, meeting_id):
         meeting_action_points = meeting.action_points
 
     all_employees = Employee.objects.filter(is_active=True).order_by('name') if can_edit_minutes else []
-    
+
     tasks = TaskChecklist.objects.filter(description__icontains=f"Assigned from meeting: {meeting.title}").order_by('-created_at')
 
     context = {

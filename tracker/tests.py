@@ -1006,14 +1006,24 @@ class APITaskChecklistViewSetTests(TestCase):
 
 class SelfTaskAllocationTests(TestCase):
     def setUp(self):
+        # Supervisor needed for self-task routing
+        self.sup_user = User.objects.create_user(username="sup_selftask", password="password")
+        self.supervisor = Employee.objects.create(
+            user=self.sup_user,
+            name="Self Task Supervisor",
+            email="sup_selftask@example.com",
+            employee_id="SUPST001",
+        )
+
         self.user = User.objects.create_user(username="emp_selftask", password="password")
         self.employee = Employee.objects.create(
             user=self.user,
             name="Self Task Employee",
             email="selftask@example.com",
-            employee_id="EMPST001"
+            employee_id="EMPST001",
+            supervisor=self.supervisor,
         )
-        # EmployeePermission is auto-created by signal
+        # EmployeePermission is auto-created by signal with can_self_assign_tasks=True
 
     def test_create_self_task_success(self):
         self.client.login(username="emp_selftask", password="password")
@@ -1077,19 +1087,9 @@ class SelfTaskAllocationTests(TestCase):
     def test_self_allocated_appears_in_supervisor_verification_center(self):
         """Self-allocated items in AWAITING_VERIFICATION should appear in
         the supervisor's verification center for approval."""
-        # Create supervisor
-        sup_user = User.objects.create_user(username="sup_sa", password="password")
-        supervisor = Employee.objects.create(
-            user=sup_user, name="Supervisor SA", employee_id="SUP-SA",
-            email="sup_sa@test.com",
-        )
-        supervisor.permissions.can_approve_checklist_items = True
-        supervisor.permissions.checklist_approve_scope = "own_team"
-        supervisor.permissions.save()
-
-        # Make employee a subordinate
-        self.employee.supervisor = supervisor
-        self.employee.save()
+        self.supervisor.permissions.can_approve_checklist_items = True
+        self.supervisor.permissions.checklist_approve_scope = "own_team"
+        self.supervisor.permissions.save()
 
         # Create a self-allocated item awaiting verification
         TaskChecklist.objects.create(
@@ -1100,7 +1100,50 @@ class SelfTaskAllocationTests(TestCase):
             status='AWAITING_VERIFICATION',
         )
 
-        self.client.login(username="sup_sa", password="password")
+        self.client.login(username="sup_selftask", password="password")
         response = self.client.get('/dashboard/checklist/verify/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['awaiting_count'], 1)
+
+    # ── New guard tests ──
+
+    def test_create_self_task_blocked_without_permission(self):
+        """An employee whose can_self_assign_tasks is False must receive 403."""
+        self.employee.permissions.can_self_assign_tasks = False
+        self.employee.permissions.save()
+
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.post('/dashboard/self-task/create/', {
+            'title': 'Should Be Blocked',
+            'description': 'No permission',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(
+            b"You do not have permission to create self-assigned tasks",
+            response.content,
+        )
+        self.assertEqual(TaskChecklist.objects.count(), 0)
+
+    def test_create_self_task_blocked_without_supervisor(self):
+        """An employee with no supervisor must be blocked with a clear message
+        rather than silently creating an item that can never be verified."""
+        # Remove supervisor
+        self.employee.supervisor = None
+        self.employee.save()
+
+        self.client.login(username="emp_selftask", password="password")
+        response = self.client.post('/dashboard/self-task/create/', {
+            'title': 'No Supervisor Task',
+            'description': 'Should be blocked',
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)  # redirected to my_tasks
+
+        # Check the error message is present
+        messages_list = list(response.context['messages'])
+        self.assertTrue(len(messages_list) > 0)
+        message_text = str(messages_list[0])
+        self.assertIn('do not have a supervisor', message_text)
+        self.assertIn('verification workflow', message_text)
+
+        # No item should have been created
+        self.assertEqual(TaskChecklist.objects.count(), 0)
