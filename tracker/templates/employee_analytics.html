@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block title %}Team Analytics{% endblock %}
+
+{% block content %}
+<!-- Top bar -->
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-graph-up me-2"></i>Team Analytics</h4>
+    <span class="meta">
+      {% if scope == 'own_team' %}
+        Viewing analytics for your direct reports only.
+      {% else %}
+        Viewing analytics for all employees in the organization.
+      {% endif %}
+    </span>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-xl-6">
+    <!-- Role Breakdown Card -->
+    <div class="table-card h-100">
+      <div class="table-header">
+        <h6><i class="bi bi-diagram-3 me-1"></i> Role Breakdown</h6>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-borderless table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Designation</th>
+              <th class="text-center">Headcount</th>
+              <th class="text-center">Avg Task Load</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for role in role_breakdown %}
+            <tr>
+              <td><span class="fw-medium text-dark">{{ role.designation }}</span></td>
+              <td class="text-center">
+                <span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:12px;padding:5px 12px;font-size:0.85rem;font-weight:600;">
+                  {{ role.headcount }}
+                </span>
+              </td>
+              <td class="text-center">
+                {% if role.avg_load > 10 %}
+                  <span class="badge" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:12px;padding:5px 12px;font-size:0.85rem;font-weight:600;">{{ role.avg_load }}</span>
+                {% elif role.avg_load > 5 %}
+                  <span class="badge" style="background:#fef9c3;color:#ca8a04;border:1px solid #fef08a;border-radius:12px;padding:5px 12px;font-size:0.85rem;font-weight:600;">{{ role.avg_load }}</span>
+                {% else %}
+                  <span class="badge" style="background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0;border-radius:12px;padding:5px 12px;font-size:0.85rem;font-weight:600;">{{ role.avg_load }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3" class="text-center text-muted py-4">No data available.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <!-- Employee Load Card -->
+    <div class="table-card h-100">
+      <div class="table-header">
+        <h6><i class="bi bi-people me-1"></i> Current Workload by Employee</h6>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-borderless table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Role</th>
+              <th class="text-center">Current Load</th>
+              <th>Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for emp in employees %}
+            <tr>
+              <td>
+                <div class="fw-medium text-dark">{{ emp.name }}</div>
+                <div class="text-muted" style="font-size: 0.8rem;">{{ emp.employment_type|title }}</div>
+              </td>
+              <td><span class="text-secondary" style="font-size: 0.9rem;">{{ emp.designation }}</span></td>
+              <td class="text-center">
+                <span class="badge" style="background:#f1f5f9;color:#0f172a;border:1px solid #e2e8f0;border-radius:6px;font-weight:600;font-size:0.85rem;">
+                  {{ emp.current_load }}
+                </span>
+              </td>
+              <td style="min-width: 150px;">
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1" style="height: 6px; border-radius: 3px; background-color: #f1f5f9;">
+                    <div class="progress-bar" role="progressbar" 
+                         style="width: {{ emp.completion_percentage }}%; background-color: {% if emp.completion_percentage == 100 %}#10b981{% elif emp.completion_percentage > 50 %}#3b82f6{% else %}#f59e0b{% endif %}; border-radius: 3px;" 
+                         aria-valuenow="{{ emp.completion_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                    </div>
+                  </div>
+                  <span class="text-muted" style="font-size: 0.75rem; font-weight: 500;">{{ emp.completion_percentage|floatformat:0 }}%</span>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">No data available.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

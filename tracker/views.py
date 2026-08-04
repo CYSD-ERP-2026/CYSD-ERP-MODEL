@@ -289,13 +289,15 @@ def update_employee_permissions(request, emp_id):
             'can_read_confidential_meetings',
             'can_access_admin_panel',
             'can_self_assign_tasks',
+            'can_view_employee_analytics',
             'checklist_assign_scope',
             'checklist_approve_scope',
+            'employee_analytics_scope',
         ]
 
         for field in allowed_fields:
             if field in data:
-                if field in ['checklist_assign_scope', 'checklist_approve_scope']:
+                if field in ['checklist_assign_scope', 'checklist_approve_scope', 'employee_analytics_scope']:
                     if data[field] not in ['none', 'own_team', 'all']:
                         return JsonResponse({'error': f'Invalid value for {field}.'}, status=400)
                 setattr(target_perms, field, data[field])
@@ -1036,3 +1038,70 @@ def meeting_details_view(request, meeting_id):
     }
     return render(request, 'meeting_details.html', context)
 
+
+@login_required
+def employee_analytics_view(request):
+    """
+    Employee Analytics: Shows who is in what role and how many tasks each person
+    is currently handling.
+    """
+    profile = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile, 'permissions', None) if profile else None
+
+    if not perms or not perms.can_view_employee_analytics:
+        return HttpResponseForbidden("You do not have permission to view employee analytics.")
+
+    scope = perms.employee_analytics_scope
+
+    if scope == 'own_team':
+        qs = Employee.objects.filter(supervisor=profile, is_active=True)
+    else:  # scope == 'all'
+        qs = Employee.objects.filter(is_active=True)
+
+    qs = qs.prefetch_related('stats').order_by('name')
+
+    employees_data = []
+    designation_stats = {}
+
+    for emp in qs:
+        # Task load = pending + awaiting
+        load = 0
+        completion_percentage = 0.0
+        if hasattr(emp, 'stats'):
+            stats = emp.stats
+            load = stats.total_pending + stats.total_awaiting
+            completion_percentage = float(stats.completion_percentage)
+
+        desig = emp.designation or 'Unassigned'
+
+        employees_data.append({
+            'name': emp.name,
+            'designation': desig,
+            'employment_type': emp.employment_type,
+            'current_load': load,
+            'completion_percentage': completion_percentage,
+        })
+
+        if desig not in designation_stats:
+            designation_stats[desig] = {'headcount': 0, 'total_load': 0}
+
+        designation_stats[desig]['headcount'] += 1
+        designation_stats[desig]['total_load'] += load
+
+    role_breakdown = []
+    for desig, data in designation_stats.items():
+        avg_load = data['total_load'] / data['headcount'] if data['headcount'] > 0 else 0
+        role_breakdown.append({
+            'designation': desig,
+            'headcount': data['headcount'],
+            'avg_load': round(avg_load, 1)
+        })
+
+    role_breakdown.sort(key=lambda x: x['designation'])
+
+    context = {
+        'employees': employees_data,
+        'role_breakdown': role_breakdown,
+        'scope': scope,
+    }
+    return render(request, 'employee_analytics.html', context)

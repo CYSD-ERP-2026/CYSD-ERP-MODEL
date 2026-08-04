@@ -750,6 +750,10 @@ class EmployeePermission(models.Model):
         help_text='Can create self-allocated checklist tasks '
                   '(employee picks up work proactively)',
     )
+    can_view_employee_analytics = models.BooleanField(
+        default=False,
+        help_text='Can view team / organization employee workload analytics',
+    )
 
     # ── Scope fields (3) ──
     checklist_assign_scope = models.CharField(
@@ -764,6 +768,13 @@ class EmployeePermission(models.Model):
         choices=PERMISSION_SCOPE_CHOICES,
         default='none',
         help_text="'none' = cannot approve, 'own_team' = direct reports only, "
+                  "'all' = any employee in the enterprise",
+    )
+    employee_analytics_scope = models.CharField(
+        max_length=10,
+        choices=PERMISSION_SCOPE_CHOICES,
+        default='none',
+        help_text="'none' = cannot view, 'own_team' = direct reports only, "
                   "'all' = any employee in the enterprise",
     )
 

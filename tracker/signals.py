@@ -39,8 +39,10 @@ DEFAULT_PERMISSIONS = {
     'can_read_confidential_meetings': True,
     'can_access_admin_panel': False,
     'can_self_assign_tasks': True,
+    'can_view_employee_analytics': False,
     'checklist_assign_scope': 'none',
     'checklist_approve_scope': 'none',
+    'employee_analytics_scope': 'none',
 }
 
 @receiver(post_save, sender=Employee)

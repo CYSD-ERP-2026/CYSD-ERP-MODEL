@@ -1147,3 +1147,122 @@ class SelfTaskAllocationTests(TestCase):
 
         # No item should have been created
         self.assertEqual(TaskChecklist.objects.count(), 0)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. Employee Analytics Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class EmployeeAnalyticsTests(TestCase):
+    def setUp(self):
+        # Create users
+        self.founder_user = User.objects.create_user(username="founder_anal", password="password")
+        self.sup_user = User.objects.create_user(username="sup_anal", password="password")
+        self.emp1_user = User.objects.create_user(username="emp1_anal", password="password")
+        self.emp2_user = User.objects.create_user(username="emp2_anal", password="password")
+        self.emp3_user = User.objects.create_user(username="emp3_anal", password="password")
+
+        # Create founder
+        self.founder = Employee.objects.create(
+            user=self.founder_user, name="Founder", employee_id="FA01", designation="Founder", email="founder@example.com"
+        )
+        self.founder.permissions.can_view_employee_analytics = True
+        self.founder.permissions.employee_analytics_scope = 'all'
+        self.founder.permissions.can_assign_checklist_items = True
+        self.founder.permissions.checklist_assign_scope = 'all'
+        self.founder.permissions.save()
+
+        # Create supervisor
+        self.supervisor = Employee.objects.create(
+            user=self.sup_user, name="Supervisor", employee_id="SA01", designation="Manager", email="sup@example.com"
+        )
+        self.supervisor.permissions.can_view_employee_analytics = True
+        self.supervisor.permissions.employee_analytics_scope = 'own_team'
+        self.supervisor.permissions.can_assign_checklist_items = True
+        self.supervisor.permissions.checklist_assign_scope = 'own_team'
+        self.supervisor.permissions.save()
+
+        # Create employee 1 (reports to supervisor)
+        self.emp1 = Employee.objects.create(
+            user=self.emp1_user, name="Emp1", employee_id="EA01", designation="Dev", supervisor=self.supervisor, email="emp1@example.com"
+        )
+        # Create employee 2 (reports to supervisor)
+        self.emp2 = Employee.objects.create(
+            user=self.emp2_user, name="Emp2", employee_id="EA02", designation="Dev", supervisor=self.supervisor, email="emp2@example.com"
+        )
+        # Create employee 3 (reports to founder)
+        self.emp3 = Employee.objects.create(
+            user=self.emp3_user, name="Emp3", employee_id="EA03", designation="Designer", supervisor=self.founder, email="emp3@example.com"
+        )
+
+        # Create tasks to generate stats
+        # emp1: 2 PENDING, 1 AWAITING_VERIFICATION, 1 COMPLETED -> Current Load: 3
+        for _ in range(2):
+            TaskChecklist.objects.create(title="Pending", assigned_to=self.emp1, created_by=self.supervisor, status="PENDING")
+        TaskChecklist.objects.create(title="Awaiting", assigned_to=self.emp1, created_by=self.supervisor, status="AWAITING_VERIFICATION")
+        TaskChecklist.objects.create(title="Completed", assigned_to=self.emp1, created_by=self.supervisor, status="COMPLETED")
+
+        # emp2: 1 PENDING -> Current Load: 1
+        TaskChecklist.objects.create(title="Pending", assigned_to=self.emp2, created_by=self.supervisor, status="PENDING")
+
+        # Re-calc stats (signals handle creation, but we explicitly ensure they are accurate)
+        EmployeeStats.recalculate_for(self.emp1)
+        EmployeeStats.recalculate_for(self.emp2)
+        EmployeeStats.recalculate_for(self.emp3)
+
+    def test_employee_analytics_view_blocked_without_permission(self):
+        # Emp1 has default can_view_employee_analytics=False
+        self.client.login(username="emp1_anal", password="password")
+        response = self.client.get('/dashboard/analytics/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_sees_own_team(self):
+        self.client.login(username="sup_anal", password="password")
+        response = self.client.get('/dashboard/analytics/')
+        self.assertEqual(response.status_code, 200)
+
+        employees = response.context['employees']
+        role_breakdown = response.context['role_breakdown']
+
+        # Supervisor should only see Emp1 and Emp2 (direct reports)
+        names = [emp['name'] for emp in employees]
+        self.assertIn("Emp1", names)
+        self.assertIn("Emp2", names)
+        self.assertNotIn("Emp3", names)
+        self.assertNotIn("Founder", names)
+
+        # Role breakdown should only show 'Dev'
+        designations = [r['designation'] for r in role_breakdown]
+        self.assertIn("Dev", designations)
+        self.assertNotIn("Designer", designations)
+
+    def test_founder_sees_all_employees(self):
+        self.client.login(username="founder_anal", password="password")
+        response = self.client.get('/dashboard/analytics/')
+        self.assertEqual(response.status_code, 200)
+
+        employees = response.context['employees']
+        names = [emp['name'] for emp in employees]
+        self.assertIn("Emp1", names)
+        self.assertIn("Emp2", names)
+        self.assertIn("Emp3", names)
+        self.assertIn("Founder", names)
+        self.assertIn("Supervisor", names)
+
+    def test_task_load_calculation(self):
+        self.client.login(username="sup_anal", password="password")
+        response = self.client.get('/dashboard/analytics/')
+        employees = response.context['employees']
+
+        emp1_data = next(emp for emp in employees if emp['name'] == "Emp1")
+        emp2_data = next(emp for emp in employees if emp['name'] == "Emp2")
+
+        # Emp1 should have load 3 (2 pending + 1 awaiting) - completed is excluded
+        self.assertEqual(emp1_data['current_load'], 3)
+        # Emp2 should have load 1
+        self.assertEqual(emp2_data['current_load'], 1)
+
+        # Check role breakdown for Dev (Emp1 + Emp2 -> load 3 + 1 = 4. Count = 2. Avg = 2.0)
+        role_breakdown = response.context['role_breakdown']
+        dev_data = next(role for role in role_breakdown if role['designation'] == "Dev")
+        self.assertEqual(dev_data['headcount'], 2)
+        self.assertEqual(dev_data['avg_load'], 2.0)

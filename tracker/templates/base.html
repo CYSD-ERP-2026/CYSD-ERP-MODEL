@@ -88,6 +88,11 @@
         <i class="bi bi-check2-square"></i> Verification Center
       </a>
       {% endif %}
+      {% if request.user.is_superuser or request.user.employee_profile.permissions.can_view_employee_analytics %}
+      <a href="{% url 'tracker:employee_analytics' %}" class="{% if '/dashboard/analytics/' in request.path %}active{% endif %}">
+        <i class="bi bi-graph-up"></i> Team Analytics
+      </a>
+      {% endif %}
       <a href="{% url 'tracker:dashboard' %}" class="{% if request.path == '/dashboard/' %}active{% endif %}">
         <i class="bi bi-speedometer2"></i> Dashboard
       </a>

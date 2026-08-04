@@ -14,6 +14,7 @@ urlpatterns = [
     path('meetings/<int:meeting_id>/', views.meeting_details_view, name='meeting_details'),
     path('my-tasks/', views.my_tasks_view, name='my_tasks'),
     path('export/', views.export_meetings_csv, name='export_meetings_csv'),
+    path('analytics/', views.employee_analytics_view, name='employee_analytics'),
 
 
     # ── Task Checklist ────────────────────────────────────────────────────
