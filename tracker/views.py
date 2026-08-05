@@ -192,11 +192,11 @@ def export_meetings_csv(request):
     response['Content-Disposition'] = 'attachment; filename="meetings_export.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(['Title', 'Date', 'Domain', 'Intervention Scale', 'Type', 'Status', 'Venue', 'Organised By'])
+    writer.writerow(['Title', 'Date', 'Domain', 'Intervention Scale', 'Type', 'Status', 'Venue', 'Organised By', 'Convenor', 'Facilitator', 'Rapporteur'])
 
     meetings = (
         Meeting.objects.filter()
-        .select_related('domain')
+        .select_related('domain', 'convenor', 'facilitator', 'rapporteur')
         .order_by('-date', '-start_time')
     )
 
@@ -214,6 +214,9 @@ def export_meetings_csv(request):
             status_labels.get(m.status, m.status),
             m.venue,
             m.organised_by,
+            m.convenor.name if m.convenor else '',
+            m.facilitator.name if m.facilitator else '',
+            m.rapporteur.name if m.rapporteur else '',
         ])
 
     return response
@@ -240,7 +243,7 @@ def employees_list_view(request):
 
     qs = (
         Employee.objects.filter()
-        .select_related('domain')
+        .prefetch_related('domains')
         .order_by('name')
     )
     employee_filter = EmployeeFilter(request.GET, queryset=qs, request=request)
@@ -349,11 +352,10 @@ def meetings_list_view(request):
                 m.action_points = 'Confidential - Access Restricted'
 
     # Check if user has permission to create meetings (Supervisor and above)
-    can_create_meeting = False
+    can_create_meeting = request.user.is_superuser
     if profile and perms:
-        # We consider Supervisor and above to be those who can approve or assign checklist items
-        # or manage organization
-        can_create_meeting = perms.can_assign_checklist_items or perms.can_manage_organization
+        if perms.can_schedule_meetings or perms.can_manage_organization:
+            can_create_meeting = True
 
     context = {
         'filter': meeting_filter,
@@ -850,8 +852,9 @@ def meeting_create_view(request):
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
 
-    # Restrict to supervisor and above (can_assign_checklist_items is a good proxy)
-    if not perms or not (perms.can_assign_checklist_items or perms.can_manage_organization):
+    is_admin = request.user.is_superuser or (perms and perms.can_manage_organization)
+    can_create = is_admin or (perms and perms.can_schedule_meetings)
+    if not can_create:
         return HttpResponseForbidden("You do not have permission to schedule meetings.")
 
     if request.method == 'POST':
@@ -867,12 +870,22 @@ def meeting_create_view(request):
         agenda = request.POST.get('agenda', '').strip()
         attendee_ids = request.POST.getlist('attendees')
 
+        # Meeting role assignments
+        convenor_id = request.POST.get('convenor') or None
+        facilitator_id = request.POST.get('facilitator') or None
+        rapporteur_id = request.POST.get('rapporteur') or None
+
         if not title or not date_str:
             messages.error(request, "Title and Date are required.")
             return redirect('tracker:meetings')
 
         try:
             domain = Domain.objects.get(pk=domain_id) if domain_id else None
+
+            # Resolve role FKs (all optional)
+            convenor = Employee.objects.filter(pk=convenor_id).first() if convenor_id else None
+            facilitator = Employee.objects.filter(pk=facilitator_id).first() if facilitator_id else None
+            rapporteur = Employee.objects.filter(pk=rapporteur_id).first() if rapporteur_id else None
 
             # Create the meeting
             meeting = Meeting(
@@ -885,7 +898,10 @@ def meeting_create_view(request):
                 venue=venue,
                 agenda=agenda,
                 organizer=profile,
-                organised_by=profile.name if profile else request.user.username
+                organised_by=profile.name if profile else request.user.username,
+                convenor=convenor,
+                facilitator=facilitator,
+                rapporteur=rapporteur,
             )
 
             if start_time_str:
@@ -1005,6 +1021,21 @@ def meeting_details_view(request, meeting_id):
             meeting.action_points = request.POST.get('action_points', '')
             meeting.save()
             messages.success(request, "Meeting details updated successfully.")
+            return redirect('tracker:meeting_details', meeting_id=meeting.id)
+
+        elif action == 'update_roles':
+            if not can_edit_minutes:
+                return HttpResponseForbidden("You do not have permission to edit meeting roles.")
+
+            convenor_id = request.POST.get('convenor') or None
+            facilitator_id = request.POST.get('facilitator') or None
+            rapporteur_id = request.POST.get('rapporteur') or None
+
+            meeting.convenor = Employee.objects.filter(pk=convenor_id).first() if convenor_id else None
+            meeting.facilitator = Employee.objects.filter(pk=facilitator_id).first() if facilitator_id else None
+            meeting.rapporteur = Employee.objects.filter(pk=rapporteur_id).first() if rapporteur_id else None
+            meeting.save()
+            messages.success(request, "Meeting roles updated successfully.")
             return redirect('tracker:meeting_details', meeting_id=meeting.id)
 
         elif action == 'create_task':

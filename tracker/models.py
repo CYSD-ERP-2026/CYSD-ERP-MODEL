@@ -239,12 +239,14 @@ class Employee(models.Model):
 # ---------------------------------------------------------------------------
 
 MEETING_TYPE_CHOICES = [
-    ('internal', 'Internal Review'),
-    ('field', 'Field Visit'),
-    ('partner', 'Partner / Stakeholder Meeting'),
-    ('training', 'Training / Workshop'),
-    ('board', 'Board / Governance Meeting'),
-    ('other', 'Other'),
+    ('smt', 'SMT Meeting'),
+    ('leadership', 'Leadership Meeting'),
+    ('zonal_integration', 'Zonal Integration Meeting'),
+    ('block_integration', 'Block Integration Meeting'),
+    ('board', 'Board Meeting'),
+    ('agm', 'AGM Meeting'),
+    ('program_division', 'Program Division Meeting'),
+    ('psd', 'PSD Meeting'),
 ]
 
 MEETING_STATUS_CHOICES = [
@@ -344,6 +346,33 @@ class Meeting(models.Model):
         blank=True,
         related_name='organized_meetings',
         help_text='Employee who called/organized this meeting'
+    )
+    convenor = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='convened_meetings',
+        help_text='Employee designated as the Meeting Convenor '
+                  '(responsible for calling and coordinating the meeting)',
+    )
+    facilitator = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='facilitated_meetings',
+        help_text='Employee designated as the Meeting Facilitator '
+                  '(responsible for guiding discussions and maintaining flow)',
+    )
+    rapporteur = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rapporteur_meetings',
+        help_text='Employee designated as the Meeting Rapporteur '
+                  '(responsible for documenting proceedings and preparing reports)',
     )
     organised_by = models.CharField(
         max_length=150,
@@ -742,6 +771,10 @@ class EmployeePermission(models.Model):
     can_approve_checklist_items = models.BooleanField(
         default=False,
         help_text='Can approve / reject submitted TaskChecklist items',
+    )
+    can_schedule_meetings = models.BooleanField(
+        default=False,
+        help_text='Can schedule new meetings via the frontend',
     )
     can_read_confidential_meetings = models.BooleanField(
         default=False,

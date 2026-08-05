@@ -164,8 +164,11 @@ class EmployeePermissionInline(TabularInline):
         'can_manage_organization',
         'can_assign_checklist_items',
         'can_approve_checklist_items',
+        'can_schedule_meetings',
         'can_read_confidential_meetings',
         'can_access_admin_panel',
+        'can_self_assign_tasks',
+        'can_view_employee_analytics',
         # Scope selectors
         'checklist_assign_scope',
         'checklist_approve_scope',
@@ -291,7 +294,7 @@ class MeetingAdmin(ModelAdmin):
     list_display_links = ('title',)
     list_filter = ('status', 'meeting_type', 'domain', 'date')
     search_fields = ('title', 'venue', 'organised_by', 'agenda', 'minutes')
-    autocomplete_fields = ('attendees',)
+    autocomplete_fields = ('attendees', 'organizer', 'convenor', 'facilitator', 'rapporteur')
     date_hierarchy = 'date'
     ordering = ('-date', '-start_time')
     readonly_fields = ('created_at', 'updated_at', 'attendee_count_display')
@@ -302,6 +305,10 @@ class MeetingAdmin(ModelAdmin):
         }),
         ('Schedule & Location', {
             'fields': ('date', 'start_time', 'end_time', 'venue', 'organised_by'),
+        }),
+        ('Meeting Roles', {
+            'description': 'Assign key governance roles for this meeting.',
+            'fields': ('organizer', 'convenor', 'facilitator', 'rapporteur'),
         }),
         ('Content', {
             'fields': ('agenda', 'attendees', 'minutes', 'action_points'),

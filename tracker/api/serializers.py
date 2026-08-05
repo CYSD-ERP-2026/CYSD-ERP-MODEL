@@ -11,10 +11,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
 class MeetingSerializer(serializers.ModelSerializer):
     attendees = EmployeeSerializer(many=True, read_only=True)
+    convenor = EmployeeSerializer(read_only=True)
+    facilitator = EmployeeSerializer(read_only=True)
+    rapporteur = EmployeeSerializer(read_only=True)
 
     class Meta:
         model = Meeting
-        fields = ['id', 'title', 'date', 'start_time', 'end_time', 'agenda', 'minutes', 'action_points', 'status', 'attendees']
+        fields = ['id', 'title', 'date', 'start_time', 'end_time', 'agenda', 'minutes', 'action_points', 'status', 'attendees', 'convenor', 'facilitator', 'rapporteur']
 
 class TaskSerializer(serializers.ModelSerializer):
     assigned_to = EmployeeSerializer(many=True, read_only=True)

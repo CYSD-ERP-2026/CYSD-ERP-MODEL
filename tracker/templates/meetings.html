@@ -125,8 +125,8 @@
           <th>Title</th>
           <th>Domain</th>
           <th>Scale</th>
-          <th>Date</th>
-          <th>Type</th>
+          <th>Date &amp; Time</th>
+          <th>Meeting Domain</th>
           <th>Organised By</th>
           <th>Attendees</th>
           <th>Status</th>
@@ -147,7 +147,7 @@
               </small>
             {% endif %}
           </td>
-          <td data-label="Type">{{ m.get_meeting_type_display }}</td>
+          <td data-label="Meeting Domain">{{ m.get_meeting_type_display }}</td>
           <td data-label="Organised By">{{ m.organised_by|default:"—" }}</td>
           <td data-label="Attendees">
             <span class="badge bg-light text-dark border fw-semibold"
@@ -248,19 +248,64 @@
             </div>
 
             <div class="col-md-6">
-              <label for="meetingType" class="form-label fw-semibold text-secondary">Meeting Type</label>
+              <label for="meetingType" class="form-label fw-semibold text-secondary">Meeting Domain</label>
               <select class="form-select" id="meetingType" name="meeting_type">
-                <option value="internal" selected>Internal Review</option>
-                <option value="external">External Stakeholder</option>
-                <option value="community">Community Interface</option>
-                <option value="training">Training / Workshop</option>
-                <option value="board">Board / Governance</option>
+                <option value="smt" selected>SMT Meeting</option>
+                <option value="leadership">Leadership Meeting</option>
+                <option value="zonal_integration">Zonal Integration Meeting</option>
+                <option value="block_integration">Block Integration Meeting</option>
+                <option value="board">Board Meeting</option>
+                <option value="agm">AGM Meeting</option>
+                <option value="program_division">Program Division Meeting</option>
+                <option value="psd">PSD Meeting</option>
               </select>
             </div>
             
             <div class="col-md-6">
               <label for="meetingVenue" class="form-label fw-semibold text-secondary">Venue / Link</label>
               <input type="text" class="form-control" id="meetingVenue" name="venue" placeholder="Office, Zoom link, etc.">
+            </div>
+
+            <div class="col-12">
+              <hr class="my-1">
+              <label class="form-label fw-bold text-dark"><i class="bi bi-person-badge me-1"></i>Meeting Roles <small class="text-muted fw-normal">(Optional)</small></label>
+            </div>
+
+            <div class="col-md-4">
+              <label for="meetingConvenor" class="form-label fw-semibold text-secondary">Convenor</label>
+              <select class="form-select" id="meetingConvenor" name="convenor">
+                <option value="">-- Not assigned --</option>
+                {% for emp in all_employees %}
+                  <option value="{{ emp.id }}">{{ emp.name }}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Calls &amp; coordinates the meeting</small>
+            </div>
+
+            <div class="col-md-4">
+              <label for="meetingFacilitator" class="form-label fw-semibold text-secondary">Facilitator</label>
+              <select class="form-select" id="meetingFacilitator" name="facilitator">
+                <option value="">-- Not assigned --</option>
+                {% for emp in all_employees %}
+                  <option value="{{ emp.id }}">{{ emp.name }}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Guides discussions &amp; maintains flow</small>
+            </div>
+
+            <div class="col-md-4">
+              <label for="meetingRapporteur" class="form-label fw-semibold text-secondary">Rapporteur</label>
+              <select class="form-select" id="meetingRapporteur" name="rapporteur">
+                <option value="">-- Not assigned --</option>
+                {% for emp in all_employees %}
+                  <option value="{{ emp.id }}">{{ emp.name }}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Documents proceedings &amp; reports</small>
+            </div>
+
+            <div class="col-12">
+              <hr class="my-1">
             </div>
 
             <div class="col-12">

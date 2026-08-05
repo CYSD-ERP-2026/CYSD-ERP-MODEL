@@ -35,7 +35,7 @@
                         <span class="fw-medium">{{ meeting.domain.name|default:"Unassigned" }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
-                        <span class="text-muted"><i class="bi bi-tags me-2"></i>Type</span>
+                        <span class="text-muted"><i class="bi bi-tags me-2"></i>Meeting Domain</span>
                         <span class="fw-medium">{{ meeting.get_meeting_type_display }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between px-0 py-3 border-light">
@@ -55,16 +55,37 @@
                 <h6 class="fw-bold text-uppercase mb-0 text-muted" style="letter-spacing: 0.5px;">Participants</h6>
             </div>
             <div class="card-body">
-                <div class="mb-3">
-                    <span class="text-muted small">Organised By:</span>
-                    <div class="fw-semibold mt-1">
-                        {% if meeting.organizer %}
-                            {{ meeting.organizer.name }}
-                        {% else %}
-                            {{ meeting.organised_by|default:"Unknown" }}
-                        {% endif %}
+                <div class="mb-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small">Organised By:</span>
+                        <div class="fw-semibold mt-1">
+                            {% if meeting.organizer %}
+                                {{ meeting.organizer.name }}
+                            {% else %}
+                                {{ meeting.organised_by|default:"Unknown" }}
+                            {% endif %}
+                        </div>
                     </div>
+                    {% if can_edit_minutes %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editRolesModal">
+                            <i class="bi bi-pencil-square me-1"></i>Edit Roles
+                        </button>
+                    {% endif %}
                 </div>
+                
+                <div class="mb-3">
+                    <span class="text-muted small">Convenor:</span>
+                    <div class="fw-semibold mt-1">{{ meeting.convenor.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                </div>
+                <div class="mb-3">
+                    <span class="text-muted small">Facilitator:</span>
+                    <div class="fw-semibold mt-1">{{ meeting.facilitator.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                </div>
+                <div class="mb-3">
+                    <span class="text-muted small">Rapporteur:</span>
+                    <div class="fw-semibold mt-1">{{ meeting.rapporteur.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                </div>
+
                 <div>
                     <span class="text-muted small">Attendees:</span>
                     <div class="d-flex flex-wrap gap-2 mt-2">
@@ -78,6 +99,59 @@
             </div>
         </div>
     </div>
+
+    <!-- Edit Roles Modal -->
+    {% if can_edit_minutes %}
+    <div class="modal fade" id="editRolesModal" tabindex="-1" aria-labelledby="editRolesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white border-bottom-0">
+                    <h5 class="modal-title fw-bold" id="editRolesModalLabel">
+                        <i class="bi bi-person-badge me-2"></i>Edit Meeting Roles
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{% url 'tracker:meeting_details' meeting.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_roles">
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label for="id_convenor" class="form-label fw-semibold text-secondary">Convenor</label>
+                            <select name="convenor" id="id_convenor" class="form-select">
+                                <option value="">-- Not assigned --</option>
+                                {% for emp in all_employees %}
+                                    <option value="{{ emp.id }}" {% if meeting.convenor_id == emp.id %}selected{% endif %}>{{ emp.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="id_facilitator" class="form-label fw-semibold text-secondary">Facilitator</label>
+                            <select name="facilitator" id="id_facilitator" class="form-select">
+                                <option value="">-- Not assigned --</option>
+                                {% for emp in all_employees %}
+                                    <option value="{{ emp.id }}" {% if meeting.facilitator_id == emp.id %}selected{% endif %}>{{ emp.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="id_rapporteur" class="form-label fw-semibold text-secondary">Rapporteur</label>
+                            <select name="rapporteur" id="id_rapporteur" class="form-select">
+                                <option value="">-- Not assigned --</option>
+                                {% for emp in all_employees %}
+                                    <option value="{{ emp.id }}" {% if meeting.rapporteur_id == emp.id %}selected{% endif %}>{{ emp.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 bg-light">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Roles</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Right Column: Document Editor (Minutes & Action Points) -->
     <div class="col-lg-8">
