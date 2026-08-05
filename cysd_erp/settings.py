@@ -83,6 +83,8 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'django_filters',
+    'unfold.contrib.import_export',
+    'import_export',
 
     # Local
     'tracker',

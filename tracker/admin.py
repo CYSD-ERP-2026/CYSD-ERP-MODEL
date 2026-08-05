@@ -17,6 +17,9 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from unfold.admin import ModelAdmin, TabularInline
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from unfold.contrib.import_export.forms import ExportForm, ImportForm, SelectableFieldsExportForm
 
 from .models import (
     Domain,
@@ -173,8 +176,19 @@ class EmployeePermissionInline(TabularInline):
         return False
 
 
+class EmployeeResource(resources.ModelResource):
+    class Meta:
+        model = Employee
+        import_id_fields = ('employee_id',)
+        skip_unchanged = True
+        report_skipped = True
+
+
 @admin.register(Employee)
-class EmployeeAdmin(ModelAdmin):
+class EmployeeAdmin(ModelAdmin, ImportExportModelAdmin):
+    resource_classes = [EmployeeResource]
+    import_form_class = ImportForm
+    export_form_class = ExportForm
     form = EmployeeAdminForm
     inlines = [EmployeePermissionInline]
     list_display = (

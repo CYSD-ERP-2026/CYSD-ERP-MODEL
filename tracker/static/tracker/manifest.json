@@ -1,0 +1,16 @@
+{
+  "name": "CYSD ERP",
+  "short_name": "CYSD ERP",
+  "description": "Enterprise ERP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/static/tracker/icons/cysd_erp.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
