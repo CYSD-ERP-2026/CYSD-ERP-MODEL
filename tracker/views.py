@@ -633,9 +633,17 @@ def checklist_supervisor_view(request):
             Employee.objects.filter(supervisor=profile).values_list('id', flat=True)
         )
         base_qs = TaskChecklist.objects.filter(assigned_to__id__in=subordinate_ids)
-    else:
+    elif approve_scope == 'own_domain':
+        domains = profile.domains.all()
+        base_qs = TaskChecklist.objects.filter(assigned_to__domains__in=domains).distinct()
+    elif approve_scope == 'own_project':
+        projects = profile.projects.all()
+        base_qs = TaskChecklist.objects.filter(assigned_to__projects__in=projects).distinct()
+    elif approve_scope == 'all':
         # scope == 'all' → see the entire organization (scoped to tenant)
-        base_qs = TaskChecklist.objects.filter()
+        base_qs = TaskChecklist.objects.all()
+    else:
+        base_qs = TaskChecklist.objects.none()
 
     awaiting_items = (
         base_qs
@@ -654,8 +662,18 @@ def checklist_supervisor_view(request):
         team_employees = Employee.objects.filter(
             supervisor=profile, is_active=True
         ).prefetch_related('stats')
-    else:
+    elif approve_scope == 'own_domain':
+        team_employees = Employee.objects.filter(
+            domains__in=profile.domains.all(), is_active=True
+        ).distinct().prefetch_related('stats')
+    elif approve_scope == 'own_project':
+        team_employees = Employee.objects.filter(
+            projects__in=profile.projects.all(), is_active=True
+        ).distinct().prefetch_related('stats')
+    elif approve_scope == 'all':
         team_employees = Employee.objects.filter(is_active=True).prefetch_related('stats')
+    else:
+        team_employees = Employee.objects.none()
 
     # Preserve 'role' in context for template backwards-compat
     role = getattr(profile, 'role', 'employee')
@@ -705,9 +723,13 @@ def checklist_resolve_view(request, item_id):
         with transaction.atomic():
             item = TaskChecklist.objects.select_for_update().get(pk=item_id)
 
-            # Scope check: 'own_team' restricts to direct reports only
+            # Scope check
             if perms.checklist_approve_scope == 'own_team' and item.assigned_to.supervisor_id != profile.pk:
                 return HttpResponseForbidden("You can only resolve items assigned to your direct reports.")
+            elif perms.checklist_approve_scope == 'own_domain' and not item.assigned_to.domains.filter(id__in=profile.domains.all()).exists():
+                return HttpResponseForbidden("You can only resolve items assigned to your domains.")
+            elif perms.checklist_approve_scope == 'own_project' and not item.assigned_to.projects.filter(id__in=profile.projects.all()).exists():
+                return HttpResponseForbidden("You can only resolve items assigned to your projects.")
 
             if item.status != 'AWAITING_VERIFICATION':
                 messages.warning(request, "Only items awaiting verification can be resolved.")
@@ -782,6 +804,12 @@ def checklist_create_view(request):
             # Scope check
             if perms.checklist_assign_scope == 'own_team' and assigned_to.supervisor_id != profile.pk:
                 messages.error(request, "You can only assign tasks to your direct reports.")
+                return redirect('tracker:checklist_supervisor')
+            elif perms.checklist_assign_scope == 'own_domain' and not assigned_to.domains.filter(id__in=profile.domains.all()).exists():
+                messages.error(request, "You can only assign tasks to employees in your domains.")
+                return redirect('tracker:checklist_supervisor')
+            elif perms.checklist_assign_scope == 'own_project' and not assigned_to.projects.filter(id__in=profile.projects.all()).exists():
+                messages.error(request, "You can only assign tasks to employees in your projects.")
                 return redirect('tracker:checklist_supervisor')
 
             try:
@@ -1055,6 +1083,10 @@ def employee_analytics_view(request):
 
     if scope == 'own_team':
         qs = Employee.objects.filter(supervisor=profile, is_active=True)
+    elif scope == 'own_domain':
+        qs = Employee.objects.filter(domains__in=profile.domains.all(), is_active=True).distinct()
+    elif scope == 'own_project':
+        qs = Employee.objects.filter(projects__in=profile.projects.all(), is_active=True).distinct()
     elif scope == 'all':
         qs = Employee.objects.filter(is_active=True)
     else:

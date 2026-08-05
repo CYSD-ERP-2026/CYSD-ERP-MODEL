@@ -170,13 +170,17 @@ class Employee(models.Model):
     )
 
     # Role & placement
-    domain = models.ForeignKey(
+    domains = models.ManyToManyField(
         Domain,
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name='employees',
-        help_text='Primary programme domain the employee works in',
+        help_text='Programme domains the employee works in',
+    )
+    projects = models.ManyToManyField(
+        'Project',
+        blank=True,
+        related_name='enrolled_employees',
+        help_text='Projects this employee is enrolled in',
     )
     designation = models.CharField(
         max_length=150,
@@ -213,7 +217,8 @@ class Employee(models.Model):
         verbose_name = 'Employee'
         verbose_name_plural = 'Employees'
         indexes = [
-            models.Index(fields=['domain', 'is_active'], name='tracker_emp_domain_i_idx'),
+            models.Index(fields=['employee_id'], name='tracker_emp_id_idx'),
+            models.Index(fields=['is_active'], name='tracker_emp_active_idx'),
             models.Index(fields=['employment_type'], name='tracker_emp_emp_type_idx'),
         ]
 
@@ -693,6 +698,8 @@ class EmployeeStats(models.Model):
 PERMISSION_SCOPE_CHOICES = [
     ('none', 'None'),
     ('own_team', 'Own Team'),
+    ('own_domain', 'Own Domains'),
+    ('own_project', 'Own Projects'),
     ('all', 'All'),
 ]
 
@@ -757,25 +764,22 @@ class EmployeePermission(models.Model):
 
     # ── Scope fields (3) ──
     checklist_assign_scope = models.CharField(
-        max_length=10,
+        max_length=15,
         choices=PERMISSION_SCOPE_CHOICES,
         default='none',
-        help_text="'none' = cannot assign, 'own_team' = direct reports only, "
-                  "'all' = any employee in the enterprise",
+        help_text="'none' = cannot assign, 'own_team' = direct reports only, 'own_domain' = same domains, 'own_project' = same projects, 'all' = any employee",
     )
     checklist_approve_scope = models.CharField(
-        max_length=10,
+        max_length=15,
         choices=PERMISSION_SCOPE_CHOICES,
         default='none',
-        help_text="'none' = cannot approve, 'own_team' = direct reports only, "
-                  "'all' = any employee in the enterprise",
+        help_text="'none' = cannot approve, 'own_team' = direct reports only, 'own_domain' = same domains, 'own_project' = same projects, 'all' = any employee",
     )
     employee_analytics_scope = models.CharField(
-        max_length=10,
+        max_length=15,
         choices=PERMISSION_SCOPE_CHOICES,
         default='none',
-        help_text="'none' = cannot view, 'own_team' = direct reports only, "
-                  "'all' = any employee in the enterprise",
+        help_text="'none' = cannot view, 'own_team' = direct reports only, 'own_domain' = same domains, 'own_project' = same projects, 'all' = any employee",
     )
 
     class Meta:

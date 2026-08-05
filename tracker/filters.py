@@ -14,6 +14,7 @@ from .models import (
     Domain,
     Employee,
     Meeting,
+    Project,
 )
 
 
@@ -69,11 +70,6 @@ class MeetingFilter(django_filters.FilterSet):
 class EmployeeFilter(django_filters.FilterSet):
     """
     Filters for the Employees list view.
-
-    Fields:
-        name        – case-insensitive substring search
-        domain      – exact FK lookup
-        designation – case-insensitive substring search
     """
     name = django_filters.CharFilter(
         field_name='name',
@@ -81,11 +77,13 @@ class EmployeeFilter(django_filters.FilterSet):
         label='Name contains',
         widget=TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': 'Search name…'}),
     )
-    domain = django_filters.ModelChoiceFilter(
+    domains = django_filters.ModelMultipleChoiceFilter(
         queryset=Domain.objects.filter(is_active=True).order_by('name'),
-        label='Domain',
-        empty_label='All Domains',
-        widget=Select(attrs={'class': 'form-select form-select-sm'}),
+        label='Domains',
+    )
+    projects = django_filters.ModelMultipleChoiceFilter(
+        queryset=Project.objects.all(),
+        label='Projects'
     )
     designation = django_filters.CharFilter(
         field_name='designation',
@@ -96,13 +94,12 @@ class EmployeeFilter(django_filters.FilterSet):
 
     class Meta:
         model = Employee
-        fields = ['name', 'domain', 'designation']
+        fields = ['name', 'domains', 'projects', 'designation']
 
     def __init__(self, *args, **kwargs):
         request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
         if request and hasattr(request, 'tenant'):
             qs = Domain.objects.filter(is_active=True).order_by('name')
-            self.filters['domain'].queryset = qs
-            if 'domain' in self.form.fields:
-                self.form.fields['domain'].queryset = qs
+            if 'domains' in self.form.fields:
+                self.form.fields['domains'].queryset = qs

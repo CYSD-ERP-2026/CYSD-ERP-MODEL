@@ -134,6 +134,10 @@ class TaskViewSet(
                     .values_list('id', flat=True)
                 )
                 return Task.objects.filter(assigned_to__id__in=subordinate_ids)
+            if perms.checklist_approve_scope == 'own_domain':
+                return Task.objects.filter(assigned_to__domains__in=profile.domains.all()).distinct()
+            if perms.checklist_approve_scope == 'own_project':
+                return Task.objects.filter(assigned_to__projects__in=profile.projects.all()).distinct()
 
         # Base role: own tasks only
         if profile:
@@ -174,6 +178,14 @@ class TaskChecklistViewSet(
                 return TaskChecklist.objects.filter(
                     assigned_to__id__in=subordinate_ids
                 )
+            if perms.checklist_approve_scope == 'own_domain':
+                return TaskChecklist.objects.filter(
+                    assigned_to__domains__in=profile.domains.all()
+                ).distinct()
+            if perms.checklist_approve_scope == 'own_project':
+                return TaskChecklist.objects.filter(
+                    assigned_to__projects__in=profile.projects.all()
+                ).distinct()
 
         # Base role: own items only
         if profile:
@@ -206,6 +218,18 @@ class TaskChecklistViewSet(
             if checklist.assigned_to.supervisor_id != profile.pk:
                 return Response(
                     {'error': 'You can only approve items assigned to your direct reports.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif perms.checklist_approve_scope == 'own_domain':
+            if not checklist.assigned_to.domains.filter(id__in=profile.domains.all()).exists():
+                return Response(
+                    {'error': 'You can only approve items assigned to employees in your domains.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif perms.checklist_approve_scope == 'own_project':
+            if not checklist.assigned_to.projects.filter(id__in=profile.projects.all()).exists():
+                return Response(
+                    {'error': 'You can only approve items assigned to employees in your projects.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 

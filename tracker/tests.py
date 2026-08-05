@@ -1,5 +1,15 @@
 import json
 
+def create_test_employee(**kwargs):
+    from tracker.models import Employee
+    domain = kwargs.pop("domain", None)
+    emp = Employee.objects.create(**kwargs)
+    if domain:
+        emp.domains.add(domain)
+    return emp
+
+
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -104,7 +114,7 @@ class RoleBasedPermissionTests(TestCase):
         # Create Users & Employees
         # Supervisor
         self.super_user = User.objects.create_user(username="supervisor_u", password="password123", is_staff=True)
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.super_user,
             name="Supervisor",
             employee_id="EMP-SUP",
@@ -114,7 +124,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # Subordinate (Direct Report)
         self.sub_user = User.objects.create_user(username="sub_u", password="password123")
-        self.subordinate = Employee.objects.create(
+        self.subordinate = create_test_employee(
             user=self.sub_user,
             name="Subordinate",
             employee_id="EMP-SUB",
@@ -125,7 +135,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # Non-subordinate
         self.other_user = User.objects.create_user(username="other_u", password="password123")
-        self.non_subordinate = Employee.objects.create(
+        self.non_subordinate = create_test_employee(
             user=self.other_user,
             name="Non Subordinate",
             employee_id="EMP-OTHER",
@@ -135,7 +145,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # Founder
         self.founder_user = User.objects.create_user(username="founder_u", password="password123")
-        self.founder = Employee.objects.create(
+        self.founder = create_test_employee(
             user=self.founder_user,
             name="Founder",
             employee_id="EMP-FND",
@@ -145,7 +155,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # HR
         self.hr_user = User.objects.create_user(username="hr_u", password="password123")
-        self.hr = Employee.objects.create(
+        self.hr = create_test_employee(
             user=self.hr_user,
             name="HR",
             employee_id="EMP-HR",
@@ -155,7 +165,7 @@ class RoleBasedPermissionTests(TestCase):
 
         # Regular Employee
         self.emp_user = User.objects.create_user(username="emp_u", password="password123")
-        self.employee = Employee.objects.create(
+        self.employee = create_test_employee(
             user=self.emp_user,
             name="Employee",
             employee_id="EMP-REG",
@@ -319,7 +329,7 @@ class RoleBasedPermissionTests(TestCase):
     def test_employee_intern_volunteer_cannot_create_checklist_items(self):
         # Create Intern and Volunteer users & profiles
         intern_user = User.objects.create_user(username="intern_u", password="password123", is_staff=True)
-        intern = Employee.objects.create(
+        intern = create_test_employee(
             user=intern_user,
             name="Intern",
             employee_id="EMP-INT",
@@ -328,7 +338,7 @@ class RoleBasedPermissionTests(TestCase):
         )
 
         volunteer_user = User.objects.create_user(username="volunteer_u", password="password123", is_staff=True)
-        volunteer = Employee.objects.create(
+        volunteer = create_test_employee(
             user=volunteer_user,
             name="Volunteer",
             employee_id="EMP-VOL",
@@ -440,7 +450,7 @@ class RoleBasedPermissionTests(TestCase):
         they share the same organization."""
         # Create another supervisor
         supervisor_b_user = User.objects.create_user(username="supervisor_b_u", password="password123")
-        supervisor_b = Employee.objects.create(
+        supervisor_b = create_test_employee(
             user=supervisor_b_user,
             name="Supervisor B",
             employee_id="EMP-SUP-B",
@@ -494,7 +504,7 @@ class TaskChecklistLifecycleTests(TestCase):
         # Create Users & Employees
         # Supervisor
         self.super_user = User.objects.create_user(username="supervisor_u", password="password123", is_staff=True, is_superuser=False)
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.super_user,
             name="Supervisor",
             employee_id="EMP-SUP",
@@ -503,7 +513,7 @@ class TaskChecklistLifecycleTests(TestCase):
         )
 
         self.sub_user = User.objects.create_user(username="sub_u", password="password123")
-        self.subordinate = Employee.objects.create(
+        self.subordinate = create_test_employee(
             user=self.sub_user,
             name="Subordinate",
             employee_id="EMP-SUB",
@@ -678,12 +688,12 @@ class TaskChecklistLifecycleTests(TestCase):
 class PermissionUpdateTests(TestCase):
     def setUp(self):
         self.hr_user = User.objects.create_user(username="hr", password="password")
-        self.hr = Employee.objects.create(name="HR Manager", employee_id="HR-999", user=self.hr_user, email="hr@cyberdyne.com")
+        self.hr = create_test_employee(name="HR Manager", employee_id="HR-999", user=self.hr_user, email="hr@cyberdyne.com")
         self.hr.permissions.can_manage_employees = True
         self.hr.permissions.save()
 
         self.emp_user = User.objects.create_user(username="emp", password="password")
-        self.emp = Employee.objects.create(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, email="emp@cyberdyne.com")
+        self.emp = create_test_employee(name="Standard Employee", employee_id="EMP-999", user=self.emp_user, email="emp@cyberdyne.com")
 
     def test_hr_can_update_permissions(self):
         self.client.login(username="hr", password="password")
@@ -730,21 +740,21 @@ class APIEmployeeViewSetTests(TestCase):
 
         # Low-privilege employee
         self.user_a = User.objects.create_user(username="emp_a", password="pass")
-        self.emp_a = Employee.objects.create(
+        self.emp_a = create_test_employee(
             user=self.user_a, name="Emp A", employee_id="A-001",
             email="a@test.com", domain=self.domain,
         )
 
         # Another employee
         self.user_b = User.objects.create_user(username="emp_b", password="pass")
-        self.emp_b = Employee.objects.create(
+        self.emp_b = create_test_employee(
             user=self.user_b, name="Emp B", employee_id="B-001",
             email="b@test.com", domain=self.domain,
         )
 
         # HR employee with can_manage_employees
         self.user_hr = User.objects.create_user(username="hr_api", password="pass")
-        self.emp_hr = Employee.objects.create(
+        self.emp_hr = create_test_employee(
             user=self.user_hr, name="HR Api", employee_id="HR-API",
             email="hr_api@test.com", domain=self.domain,
         )
@@ -782,7 +792,7 @@ class APIMeetingViewSetTests(TestCase):
 
         # Employee without confidential access
         self.user = User.objects.create_user(username="basic", password="pass")
-        self.emp = Employee.objects.create(
+        self.emp = create_test_employee(
             user=self.user, name="Basic User", employee_id="BASIC-001",
             email="basic@test.com", domain=self.domain,
         )
@@ -792,7 +802,7 @@ class APIMeetingViewSetTests(TestCase):
 
         # Employee with confidential access
         self.priv_user = User.objects.create_user(username="priv", password="pass")
-        self.priv_emp = Employee.objects.create(
+        self.priv_emp = create_test_employee(
             user=self.priv_user, name="Priv User", employee_id="PRIV-001",
             email="priv@test.com", domain=self.domain,
         )
@@ -839,7 +849,7 @@ class APITaskViewSetTests(TestCase):
 
         # Supervisor with own_team scope
         self.sup_user = User.objects.create_user(username="sup", password="pass")
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.sup_user, name="Supervisor", employee_id="SUP-API",
             email="sup_api@test.com", domain=self.domain,
         )
@@ -849,7 +859,7 @@ class APITaskViewSetTests(TestCase):
 
         # Subordinate of supervisor
         self.sub_user = User.objects.create_user(username="sub", password="pass")
-        self.subordinate = Employee.objects.create(
+        self.subordinate = create_test_employee(
             user=self.sub_user, name="Subordinate", employee_id="SUB-API",
             email="sub_api@test.com", domain=self.domain,
             supervisor=self.supervisor,
@@ -857,7 +867,7 @@ class APITaskViewSetTests(TestCase):
 
         # Unrelated employee
         self.other_user = User.objects.create_user(username="other", password="pass")
-        self.other_emp = Employee.objects.create(
+        self.other_emp = create_test_employee(
             user=self.other_user, name="Other", employee_id="OTH-API",
             email="other_api@test.com", domain=self.domain,
         )
@@ -917,7 +927,7 @@ class APITaskChecklistViewSetTests(TestCase):
 
         # Supervisor with own_team scope
         self.sup_user = User.objects.create_user(username="sup", password="pass")
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.sup_user, name="Supervisor", employee_id="SUP-CK",
             email="sup_ck@test.com", domain=self.domain,
         )
@@ -929,7 +939,7 @@ class APITaskChecklistViewSetTests(TestCase):
 
         # Subordinate
         self.sub_user = User.objects.create_user(username="sub", password="pass")
-        self.subordinate = Employee.objects.create(
+        self.subordinate = create_test_employee(
             user=self.sub_user, name="Subordinate", employee_id="SUB-CK",
             email="sub_ck@test.com", domain=self.domain,
             supervisor=self.supervisor,
@@ -937,14 +947,14 @@ class APITaskChecklistViewSetTests(TestCase):
 
         # Another team's employee (no supervisor relationship)
         self.other_user = User.objects.create_user(username="other", password="pass")
-        self.other_emp = Employee.objects.create(
+        self.other_emp = create_test_employee(
             user=self.other_user, name="Other Employee", employee_id="OTH-CK",
             email="other_ck@test.com", domain=self.domain,
         )
 
         # Founder with 'all' scope
         self.founder_user = User.objects.create_user(username="founder_ck", password="pass")
-        self.founder_emp = Employee.objects.create(
+        self.founder_emp = create_test_employee(
             user=self.founder_user, name="Founder CK", employee_id="FND-CK",
             email="fnd_ck@test.com", domain=self.domain,
         )
@@ -1008,7 +1018,7 @@ class SelfTaskAllocationTests(TestCase):
     def setUp(self):
         # Supervisor needed for self-task routing
         self.sup_user = User.objects.create_user(username="sup_selftask", password="password")
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.sup_user,
             name="Self Task Supervisor",
             email="sup_selftask@example.com",
@@ -1016,7 +1026,7 @@ class SelfTaskAllocationTests(TestCase):
         )
 
         self.user = User.objects.create_user(username="emp_selftask", password="password")
-        self.employee = Employee.objects.create(
+        self.employee = create_test_employee(
             user=self.user,
             name="Self Task Employee",
             email="selftask@example.com",
@@ -1162,7 +1172,7 @@ class EmployeeAnalyticsTests(TestCase):
         self.emp3_user = User.objects.create_user(username="emp3_anal", password="password")
 
         # Create founder
-        self.founder = Employee.objects.create(
+        self.founder = create_test_employee(
             user=self.founder_user, name="Founder", employee_id="FA01", designation="Founder", email="founder@example.com"
         )
         self.founder.permissions.can_view_employee_analytics = True
@@ -1172,7 +1182,7 @@ class EmployeeAnalyticsTests(TestCase):
         self.founder.permissions.save()
 
         # Create supervisor
-        self.supervisor = Employee.objects.create(
+        self.supervisor = create_test_employee(
             user=self.sup_user, name="Supervisor", employee_id="SA01", designation="Manager", email="sup@example.com"
         )
         self.supervisor.permissions.can_view_employee_analytics = True
@@ -1182,15 +1192,15 @@ class EmployeeAnalyticsTests(TestCase):
         self.supervisor.permissions.save()
 
         # Create employee 1 (reports to supervisor)
-        self.emp1 = Employee.objects.create(
+        self.emp1 = create_test_employee(
             user=self.emp1_user, name="Emp1", employee_id="EA01", designation="Dev", supervisor=self.supervisor, email="emp1@example.com"
         )
         # Create employee 2 (reports to supervisor)
-        self.emp2 = Employee.objects.create(
+        self.emp2 = create_test_employee(
             user=self.emp2_user, name="Emp2", employee_id="EA02", designation="Dev", supervisor=self.supervisor, email="emp2@example.com"
         )
         # Create employee 3 (reports to founder)
-        self.emp3 = Employee.objects.create(
+        self.emp3 = create_test_employee(
             user=self.emp3_user, name="Emp3", employee_id="EA03", designation="Designer", supervisor=self.founder, email="emp3@example.com"
         )
 

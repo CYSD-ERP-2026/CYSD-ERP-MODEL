@@ -192,14 +192,14 @@ class EmployeeAdmin(ModelAdmin, ImportExportModelAdmin):
     form = EmployeeAdminForm
     inlines = [EmployeePermissionInline]
     list_display = (
-        'employee_id', 'name', 'supervisor', 'domain', 'designation',
+        'employee_id', 'name', 'supervisor', 'get_domains', 'get_projects', 'designation',
         'employment_type', 'email', 'is_active', 'date_joined',
     )
     list_display_links = ('employee_id', 'name')
-    list_filter = ('domain', 'employment_type', 'gender', 'is_active')
+    list_filter = ('domains', 'projects', 'employment_type', 'gender', 'is_active')
     search_fields = ('name', 'employee_id', 'email', 'designation', 'phone')
     list_editable = ('is_active',)
-    autocomplete_fields = ('domain', 'supervisor')
+    autocomplete_fields = ('domains', 'projects', 'supervisor')
     raw_id_fields = ('user',)
     date_hierarchy = 'date_joined'
     ordering = ('name',)
@@ -217,7 +217,7 @@ class EmployeeAdmin(ModelAdmin, ImportExportModelAdmin):
         }),
         ('Role & Employment', {
             'fields': (
-                'domain', 'designation', 'employment_type',
+                'domains', 'projects', 'designation', 'employment_type',
                 'date_joined', 'date_left', 'is_active',
             ),
         }),
@@ -233,6 +233,14 @@ class EmployeeAdmin(ModelAdmin, ImportExportModelAdmin):
             'fields': ('created_at', 'updated_at'),
         }),
     )
+
+    @admin.display(description='Domains')
+    def get_domains(self, obj):
+        return ", ".join([d.name for d in obj.domains.all()])
+
+    @admin.display(description='Projects')
+    def get_projects(self, obj):
+        return ", ".join([p.title for p in obj.projects.all()])
 
     @admin.display(description='Current Photo')
     def photo_preview(self, obj):
@@ -442,7 +450,7 @@ class TaskChecklistAdmin(ModelAdmin):
         'title', 'assigned_to', 'created_by', 'status_badge',
         'submitted_at', 'resolved_at', 'created_at',
     )
-    list_filter = ('status', 'assigned_to__domain', 'created_at')
+    list_filter = ('status', 'assigned_to__domains', 'created_at')
     search_fields = ('title', 'assigned_to__name', 'created_by__name', 'description')
     autocomplete_fields = ('assigned_to', 'created_by')
     ordering = ('-created_at',)
@@ -520,7 +528,7 @@ class EmployeeStatsAdmin(ModelAdmin):
         'total_awaiting', 'total_pending',
         'completion_pct_display', 'last_recalculated',
     )
-    list_filter  = ('employee__domain',)
+    list_filter  = ('employee__domains',)
     search_fields = ('employee__name', 'employee__employee_id')
     ordering = ('-completion_percentage',)
     readonly_fields = (
