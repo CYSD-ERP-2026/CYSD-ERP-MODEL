@@ -1055,8 +1055,10 @@ def employee_analytics_view(request):
 
     if scope == 'own_team':
         qs = Employee.objects.filter(supervisor=profile, is_active=True)
-    else:  # scope == 'all'
+    elif scope == 'all':
         qs = Employee.objects.filter(is_active=True)
+    else:
+        qs = Employee.objects.none()
 
     qs = qs.prefetch_related('stats').order_by('name')
 
