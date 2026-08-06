@@ -159,6 +159,7 @@ seed_output.log
 
 # Temporary scratch / one-off scripts
 fix_*.py
+clean_*.py
 *_helper.py
 debug_*.py
 *.log
