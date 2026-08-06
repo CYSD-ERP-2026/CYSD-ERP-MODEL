@@ -75,15 +75,15 @@
                 
                 <div class="mb-3">
                     <span class="text-muted small">Convenor:</span>
-                    <div class="fw-semibold mt-1">{{ meeting.convenor.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                    <div class="fw-semibold mt-1">{{ meeting.convenor.name|default:"Not assigned" }}</div>
                 </div>
                 <div class="mb-3">
                     <span class="text-muted small">Facilitator:</span>
-                    <div class="fw-semibold mt-1">{{ meeting.facilitator.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                    <div class="fw-semibold mt-1">{{ meeting.facilitator.name|default:"Not assigned" }}</div>
                 </div>
                 <div class="mb-3">
                     <span class="text-muted small">Rapporteur:</span>
-                    <div class="fw-semibold mt-1">{{ meeting.rapporteur.name|default:"<span class='text-muted fst-italic fw-normal'>Not assigned</span>"|safe }}</div>
+                    <div class="fw-semibold mt-1">{{ meeting.rapporteur.name|default:"Not assigned" }}</div>
                 </div>
 
                 <div>
@@ -175,7 +175,7 @@
                         {% if can_edit_minutes %}
                             <textarea class="form-control" name="agenda" rows="3" placeholder="Meeting objectives...">{{ meeting_agenda }}</textarea>
                         {% else %}
-                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_agenda|default:"<span class='text-muted fst-italic'>No agenda provided.</span>"|safe }}</div>
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_agenda|default:"No agenda provided." }}</div>
                         {% endif %}
                     </div>
 
@@ -184,7 +184,7 @@
                         {% if can_edit_minutes %}
                             <textarea class="form-control" name="minutes" rows="8" placeholder="Record discussion points here...">{{ meeting_minutes }}</textarea>
                         {% else %}
-                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 120px;">{{ meeting_minutes|default:"<span class='text-muted fst-italic'>No minutes recorded.</span>"|safe }}</div>
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 120px;">{{ meeting_minutes|default:"No minutes recorded." }}</div>
                         {% endif %}
                     </div>
 
@@ -193,7 +193,7 @@
                         {% if can_edit_minutes %}
                             <textarea class="form-control" name="action_points" rows="4" placeholder="Summarize key action points...">{{ meeting_action_points }}</textarea>
                         {% else %}
-                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_action_points|default:"<span class='text-muted fst-italic'>No action points summary.</span>"|safe }}</div>
+                            <div class="p-3 bg-white border rounded" style="white-space: pre-wrap; min-height: 80px;">{{ meeting_action_points|default:"No action points summary." }}</div>
                         {% endif %}
                     </div>
 

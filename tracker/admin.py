@@ -172,6 +172,7 @@ class EmployeePermissionInline(TabularInline):
         # Scope selectors
         'checklist_assign_scope',
         'checklist_approve_scope',
+        'employee_analytics_scope',
     )
 
     def has_add_permission(self, request, obj=None):
@@ -504,23 +505,27 @@ class TaskChecklistAdmin(ModelAdmin):
 
     @admin.action(description='Force-complete selected items')
     def mark_completed(self, request, queryset):
-        from .models import EmployeeStats
+        affected_employee_ids = set(queryset.values_list('assigned_to_id', flat=True))
         updated = queryset.update(
             status='COMPLETED',
             resolved_at=timezone.now(),
         )
-        # Recalculate stats for all affected employees
-        for item in queryset.select_related('assigned_to'):
-            EmployeeStats.recalculate_for(item.assigned_to)
+        # Recalculate stats for all affected employees (deduplicated)
+        for emp in Employee.objects.filter(id__in=affected_employee_ids):
+            EmployeeStats.recalculate_for(emp)
         self.message_user(request, f'{updated} item(s) marked as completed.')
 
     @admin.action(description='Reset selected items to Pending')
     def reset_to_pending(self, request, queryset):
+        affected_employee_ids = set(queryset.values_list('assigned_to_id', flat=True))
         updated = queryset.update(
             status='PENDING',
             submitted_at=None,
             rejection_feedback='',
         )
+        # Recalculate stats for all affected employees (deduplicated)
+        for emp in Employee.objects.filter(id__in=affected_employee_ids):
+            EmployeeStats.recalculate_for(emp)
         self.message_user(request, f'{updated} item(s) reset to Pending.')
 
 

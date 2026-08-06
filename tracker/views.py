@@ -1,31 +1,44 @@
 import csv
 import json
+import logging
+from datetime import timedelta
+from functools import wraps
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
-from django.shortcuts import redirect, render
+from django.http import (
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseForbidden,
+    JsonResponse,
+)
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 
 from .models import (
     Domain,
     Employee,
+    EmployeePermission,
     EmployeeStats,
     Meeting,
     Task,
     TaskChecklist,
 )
 
+logger = logging.getLogger(__name__)
+
 CACHE_TTL_SECONDS = 300
 
-
-from functools import wraps
-
-from django.contrib.auth.views import LoginView
-from django.utils.decorators import method_decorator
 
 
 def ratelimit(key_prefix, limit, period):
@@ -53,6 +66,24 @@ def ratelimit(key_prefix, limit, period):
 @method_decorator(ratelimit(key_prefix='login', limit=10, period=60), name='dispatch')
 class RateLimitedLoginView(LoginView):
     pass
+
+
+def _get_profile_and_perms(request):
+    """Extract employee profile and permissions from the request user."""
+    profile = getattr(request.user, 'employee_profile', None)
+    perms = getattr(profile, 'permissions', None) if profile else None
+    return profile, perms
+
+
+def _mask_confidential_meetings(meetings, perms):
+    """Mask sensitive meeting fields if the user lacks confidential read access."""
+    if not perms or not perms.can_read_confidential_meetings:
+        for m in meetings:
+            m.agenda = 'Confidential - Access Restricted'
+            m.minutes = 'Confidential - Access Restricted'
+            m.action_points = 'Confidential - Access Restricted'
+
+
 @login_required
 def dashboard_view(request: HttpRequest) -> HttpResponse:
     """Main analytics dashboard."""
@@ -60,12 +91,12 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     # --- Summary counts ---
     total_domains = Domain.objects.filter(is_active=True).count()
     total_employees = Employee.objects.filter(is_active=True).count()
-    total_meetings = Meeting.objects.filter().count()
+    total_meetings = Meeting.objects.count()
     completed_meetings = Meeting.objects.filter(status='completed').count()
 
     # --- Aggregation 1: meetings grouped by domain name ---
     by_domain_qs = (
-        Meeting.objects.filter()
+        Meeting.objects
         .values('domain__name')
         .annotate(total=Count('id'))
         .order_by('domain__name')
@@ -81,7 +112,7 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
 
     # --- Aggregation 2: meetings grouped by intervention_scale ---
     by_scale_qs = (
-        Meeting.objects.filter()
+        Meeting.objects
         .values('intervention_scale')
         .annotate(total=Count('id'))
         .order_by('intervention_scale')
@@ -98,21 +129,15 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
 
     # --- Recent meetings for the activity table ---
     recent_meetings = (
-        Meeting.objects.filter()
+        Meeting.objects
         .select_related('domain')
         .order_by('-date', '-start_time')[:10]
     )
 
     # Mask sensitive details based on permission (replaces HR role check)
     recent_meetings = list(recent_meetings)
-    profile = getattr(request.user, 'employee_profile', None)
-    if profile:
-        perms = getattr(profile, 'permissions', None)
-        if not perms or not perms.can_read_confidential_meetings:
-            for m in recent_meetings:
-                m.agenda = 'Confidential - Access Restricted'
-                m.minutes = 'Confidential - Access Restricted'
-                m.action_points = 'Confidential - Access Restricted'
+    profile, perms = _get_profile_and_perms(request)
+    _mask_confidential_meetings(recent_meetings, perms)
 
     # Task Checklist dashboard integration
     awaiting_verification_count = 0
@@ -195,7 +220,7 @@ def export_meetings_csv(request):
     writer.writerow(['Title', 'Date', 'Domain', 'Intervention Scale', 'Type', 'Status', 'Venue', 'Organised By', 'Convenor', 'Facilitator', 'Rapporteur'])
 
     meetings = (
-        Meeting.objects.filter()
+        Meeting.objects
         .select_related('domain', 'convenor', 'facilitator', 'rapporteur')
         .order_by('-date', '-start_time')
     )
@@ -226,7 +251,7 @@ def export_meetings_csv(request):
 def domains_list_view(request):
     """List all domains. Active employee count resolved via annotation to avoid N+1."""
     domains = (
-        Domain.objects.filter()
+        Domain.objects
         .annotate(emp_count=Count('employees', filter=Q(employees__is_active=True)))
         .order_by('name')
     )
@@ -242,7 +267,7 @@ def employees_list_view(request):
     from .filters import EmployeeFilter
 
     qs = (
-        Employee.objects.filter()
+        Employee.objects
         .prefetch_related('domains')
         .order_by('name')
     )
@@ -257,11 +282,6 @@ def employees_list_view(request):
     }
     return render(request, 'employees.html', context)
 
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_http_methods
-
-from .models import EmployeePermission
 
 
 @login_required
@@ -289,6 +309,7 @@ def update_employee_permissions(request, emp_id):
             'can_manage_organization',
             'can_assign_checklist_items',
             'can_approve_checklist_items',
+            'can_schedule_meetings',
             'can_read_confidential_meetings',
             'can_access_admin_panel',
             'can_self_assign_tasks',
@@ -298,10 +319,11 @@ def update_employee_permissions(request, emp_id):
             'employee_analytics_scope',
         ]
 
+        valid_scopes = {'none', 'own_team', 'own_domain', 'own_project', 'all'}
         for field in allowed_fields:
             if field in data:
                 if field in ['checklist_assign_scope', 'checklist_approve_scope', 'employee_analytics_scope']:
-                    if data[field] not in ['none', 'own_team', 'all']:
+                    if data[field] not in valid_scopes:
                         return JsonResponse({'error': f'Invalid value for {field}.'}, status=400)
                 setattr(target_perms, field, data[field])
 
@@ -310,8 +332,6 @@ def update_employee_permissions(request, emp_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data.'}, status=400)
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error updating permissions: {e}", exc_info=True)
         return JsonResponse({'error': 'An internal server error occurred.'}, status=500)
 
@@ -325,7 +345,7 @@ def meetings_list_view(request):
     perms = getattr(profile, 'permissions', None) if profile else None
 
     qs = (
-        Meeting.objects.filter()
+        Meeting.objects
         .select_related('domain')
         .prefetch_related('attendees')
         .order_by('-date', '-start_time')
@@ -341,15 +361,8 @@ def meetings_list_view(request):
     meeting_filter = MeetingFilter(request.GET, queryset=qs, request=request)
     meetings = list(meeting_filter.qs)
 
-    # Mask sensitive details based on permission (replaces HR role check)
-    profile = getattr(request.user, 'employee_profile', None)
-    if profile:
-        perms = getattr(profile, 'permissions', None)
-        if not perms or not perms.can_read_confidential_meetings:
-            for m in meetings:
-                m.agenda = 'Confidential - Access Restricted'
-                m.minutes = 'Confidential - Access Restricted'
-                m.action_points = 'Confidential - Access Restricted'
+    # Mask sensitive details based on permission
+    _mask_confidential_meetings(meetings, perms)
 
     # Check if user has permission to create meetings (Supervisor and above)
     can_create_meeting = request.user.is_superuser
@@ -537,7 +550,6 @@ def my_tasks_view(request):
 
     unified_list.sort(key=sort_key)
 
-    from datetime import timedelta
     today = timezone.now().date()
     end_of_week = today + timedelta(days=7)
 
@@ -577,8 +589,6 @@ def checklist_submit_view(request, item_id):
     Transitions: PENDING → AWAITING_VERIFICATION.
     Only the assigned employee can trigger this.
     """
-    from django.contrib import messages
-    from django.db import transaction
 
     profile = getattr(request.user, 'employee_profile', None)
     if not profile:
@@ -602,8 +612,9 @@ def checklist_submit_view(request, item_id):
             TaskChecklist.objects.filter(pk=item.pk).update(
                 status='AWAITING_VERIFICATION',
                 submitted_at=item.submitted_at)
+            # Recalculate stats so pending/awaiting counters stay accurate
+            EmployeeStats.recalculate_for(item.assigned_to)
     except TaskChecklist.DoesNotExist:
-        from django.http import Http404
         raise Http404("Checklist item not found or not assigned to you.")
 
     messages.success(request, f'"{item.title}" submitted for supervisor verification.')
@@ -702,8 +713,6 @@ def checklist_resolve_view(request, item_id):
     Approve: AWAITING_VERIFICATION → COMPLETED  (triggers signal → EmployeeStats update)
     Reject:  AWAITING_VERIFICATION → PENDING    (clears timestamps, stores feedback)
     """
-    from django.contrib import messages
-    from django.db import transaction
 
     profile = getattr(request.user, 'employee_profile', None)
     perms = getattr(profile, 'permissions', None) if profile else None
@@ -778,8 +787,6 @@ def checklist_create_view(request):
     """
     Phase 1 — Supervisor assigns a new checklist item directly from the frontend.
     """
-    from django.contrib import messages
-    from django.core.exceptions import ValidationError
     from django.http import HttpResponseForbidden
     from django.shortcuts import redirect
 
@@ -843,7 +850,6 @@ def meeting_create_view(request):
     Restricted to supervisor and above.
     """
 
-    from django.contrib import messages
     from django.http import HttpResponseForbidden
     from django.shortcuts import redirect
 
@@ -939,7 +945,6 @@ def create_self_task(request):
            to route the verification to, and the item would silently sit
            unreviewed.
     """
-    from django.contrib import messages
 
     profile = getattr(request.user, 'employee_profile', None)
     if not profile:
@@ -993,7 +998,6 @@ def create_self_task(request):
 
 @login_required
 def meeting_details_view(request, meeting_id):
-    from django.contrib import messages
     from django.http import HttpResponseForbidden
     from django.shortcuts import get_object_or_404
 

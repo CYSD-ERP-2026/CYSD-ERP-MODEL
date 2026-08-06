@@ -287,7 +287,7 @@ class Meeting(models.Model):
     meeting_type = models.CharField(
         max_length=20,
         choices=MEETING_TYPE_CHOICES,
-        default='internal',
+        default='smt',
     )
     status = models.CharField(
         max_length=20,

@@ -1,5 +1,6 @@
 import json
 
+
 def create_test_employee(**kwargs):
     from tracker.models import Employee
     domain = kwargs.pop("domain", None)
@@ -14,7 +15,8 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.template.loader import render_to_string
+from django.test import RequestFactory, TestCase, override_settings
 
 from .models import (
     Domain,
@@ -23,6 +25,7 @@ from .models import (
     Meeting,
     TaskChecklist,
     validate_document_file,
+    validate_image_file,
     validate_upload_size,
 )
 
@@ -50,6 +53,59 @@ class SecurityValidationTests(TestCase):
 
         with self.assertRaises(ValidationError):
             validate_document_file(uploaded)
+
+    def test_disallowed_image_extension_is_rejected(self):
+        uploaded = SimpleUploadedFile(
+            "evil.svg",
+            b"<svg></svg>",
+            content_type="image/svg+xml",
+        )
+
+        with self.assertRaises(ValidationError):
+            validate_image_file(uploaded)
+
+    def test_meeting_detail_template_escapes_untrusted_content(self):
+        domain = Domain.objects.create(name="Domain A", code="DA")
+        employee = Employee.objects.create(
+            employee_id="EMP-ESC",
+            name='<img src=x onerror=alert(1)>',
+            designation="Analyst",
+            email="escape@example.com",
+        )
+        employee.domains.add(domain)
+        meeting = Meeting.objects.create(
+            title="Escaping Test",
+            date="2026-08-06",
+            venue="Room 1",
+            agenda='<script>alert("x")</script>',
+            minutes='<b>hello</b>',
+            action_points='<a href="javascript:alert(1)">click</a>',
+            domain=domain,
+        )
+        meeting.attendees.add(employee)
+
+        request = RequestFactory().get('/dashboard/meetings/1/')
+        request.user = User.objects.create_user(username='viewer', password='secret')
+        rendered = render_to_string(
+            'meeting_details.html',
+            {
+                'meeting': meeting,
+                'can_edit_minutes': False,
+                'all_employees': [],
+                'meeting_agenda': meeting.agenda,
+                'meeting_minutes': meeting.minutes,
+                'meeting_action_points': meeting.action_points,
+                'confidential': False,
+                'tasks': [],
+            },
+            request=request,
+        )
+
+        self.assertIn('&lt;img', rendered)
+        self.assertIn('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;', rendered)
+        self.assertIn('&lt;a href=&quot;javascript:alert(1)&quot;&gt;click&lt;/a&gt;', rendered)
+        self.assertNotIn('<img src=x onerror=alert(1)>', rendered)
+        self.assertNotIn('<a href="javascript:alert(1)', rendered)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -814,6 +870,8 @@ class APIMeetingViewSetTests(TestCase):
             agenda="Secret agenda", minutes="Secret minutes",
             action_points="Secret actions", domain=self.domain,
         )
+        self.meeting.attendees.add(self.emp, self.priv_emp)
+
 
     def test_basic_user_sees_masked_fields(self):
         self.client.login(username="basic", password="pass")

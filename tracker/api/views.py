@@ -63,7 +63,22 @@ class MeetingViewSet(
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Meeting.objects.all()
+        user = self.request.user
+        profile = getattr(user, 'employee_profile', None)
+        perms = getattr(profile, 'permissions', None) if profile else None
+
+        qs = Meeting.objects.select_related(
+            'domain', 'convenor', 'facilitator', 'rapporteur'
+        ).prefetch_related('attendees')
+
+        # Mirror web dashboard visibility: only admins/org managers see all meetings
+        can_see_all = user.is_superuser or (perms and perms.can_manage_organization)
+        if not can_see_all and profile:
+            qs = qs.filter(attendees=profile).distinct()
+        elif not can_see_all:
+            qs = qs.none()
+
+        return qs
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)

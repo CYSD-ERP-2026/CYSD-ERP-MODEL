@@ -1,4 +1,3 @@
-import re
 
 with open('tracker/filters.py', 'r', encoding='utf-8') as f:
     content = f.read()
@@ -13,7 +12,7 @@ content = content.replace(
 employee_filter_start = content.find('class EmployeeFilter')
 if employee_filter_start != -1:
     old_employee_filter = content[employee_filter_start:]
-    
+
     # We will manually rebuild EmployeeFilter
     new_employee_filter = '''class EmployeeFilter(django_filters.FilterSet):
     """
@@ -52,7 +51,7 @@ if employee_filter_start != -1:
             if 'domains' in self.form.fields:
                 self.form.fields['domains'].queryset = qs
 '''
-    
+
     content = content[:employee_filter_start] + new_employee_filter
 
 with open('tracker/filters.py', 'w', encoding='utf-8') as f:

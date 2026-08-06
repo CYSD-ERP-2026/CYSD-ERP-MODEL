@@ -67,16 +67,15 @@ def auto_populate_employee_permission(sender, instance, created, **kwargs):
 def sync_user_admin_access(sender, instance, **kwargs):
     employee = instance.employee
     user = employee.user
-    if user:
-        if instance.can_access_admin_panel:
-            user.is_staff = True
-            user.save()
-            user.user_permissions.add(
-                *Permission.objects.filter(content_type__app_label='tracker')
-            )
-        else:
-            user.is_staff = False
-            user.save()
-            user.user_permissions.remove(
-                *Permission.objects.filter(content_type__app_label='tracker')
-            )
+    if not user:
+        return
+
+    tracker_perms = Permission.objects.filter(content_type__app_label='tracker')
+    if instance.can_access_admin_panel:
+        user.is_staff = True
+        user.save(update_fields=['is_staff'])
+        user.user_permissions.add(*tracker_perms)
+    else:
+        user.is_staff = False
+        user.save(update_fields=['is_staff'])
+        user.user_permissions.remove(*tracker_perms)
