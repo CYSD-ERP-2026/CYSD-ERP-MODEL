@@ -156,3 +156,9 @@ Thumbs.db
 ngrok-v3-stable-windows-amd64.zip
 seed_output.log
 *.zip
+
+# Temporary scratch / one-off scripts
+fix_*.py
+*_helper.py
+debug_*.py
+*.log
