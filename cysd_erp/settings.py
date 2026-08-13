@@ -3,8 +3,10 @@ Django settings for cysd_erp project.
 
 CYSD ERP Dashboard - NGO Enterprise Resource Planning System
 """
+import os
 from pathlib import Path
 
+import dj_database_url
 import environ
 from django.core.exceptions import ImproperlyConfigured
 
@@ -27,14 +29,11 @@ environ.Env.read_env(str(BASE_DIR / '.env'))
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-DEBUG = env.bool('DJANGO_DEBUG', default=False)
-SECRET_KEY = env('DJANGO_SECRET_KEY', default='django-insecure-change-me-in-production')
-if not DEBUG and SECRET_KEY.startswith('django-insecure-') and not env.bool('DJANGO_ALLOW_INSECURE_DEFAULT_SECRET', default=False):
-    raise ImproperlyConfigured('Set a strong DJANGO_SECRET_KEY for production deployments.')
-ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
-if DEBUG:
-    # Allow any host during development/debugging (e.g., ngrok tunnels)
-    ALLOWED_HOSTS = ['*']
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 't')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
+if not DEBUG and SECRET_KEY.startswith('django-insecure-') and os.environ.get('ALLOW_INSECURE_DEFAULT_SECRET', 'False').lower() not in ('true', '1', 't'):
+    raise ImproperlyConfigured('Set a strong SECRET_KEY for production deployments.')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=[])
 if DEBUG:
@@ -134,7 +133,11 @@ ASGI_APPLICATION = 'cysd_erp.asgi.application'
 # Database
 # ---------------------------------------------------------------------------
 DATABASES = {
-    'default': env.db('DATABASE_URL')
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL', 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')),
+        conn_max_age=600,
+        ssl_require=True if os.environ.get('DATABASE_URL') else False
+    )
 }
 
 # ---------------------------------------------------------------------------
@@ -178,12 +181,19 @@ USE_TZ = True
 # Static & Media files
 # ---------------------------------------------------------------------------
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 STORAGES = {
     'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'access_key': os.environ.get('AWS_ACCESS_KEY_ID'),
+            'secret_key': os.environ.get('AWS_SECRET_ACCESS_KEY'),
+            'bucket_name': os.environ.get('AWS_STORAGE_BUCKET_NAME'),
+            'endpoint_url': os.environ.get('AWS_S3_ENDPOINT_URL'),
+            'region_name': os.environ.get('AWS_S3_REGION_NAME'),
+        },
     },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
