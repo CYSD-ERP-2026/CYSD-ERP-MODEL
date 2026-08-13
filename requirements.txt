@@ -19,6 +19,5 @@ PyJWT==2.13.0
 whitenoise==6.6.0
 django-import-export==4.4.1
 openpyxl==3.1.5
-dj-database-url
-python-dotenv
-django-storages[s3]
+dj-database-url==3.1.2
+django-storages[s3]==1.14.6

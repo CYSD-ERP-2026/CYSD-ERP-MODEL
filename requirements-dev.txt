@@ -1,3 +1,6 @@
 flake8==7.0.0
 ruff==0.4.4
 pip-audit==2.10.1
+moto[server]==5.2.2
+boto3==1.43.70
+requests==2.34.2
