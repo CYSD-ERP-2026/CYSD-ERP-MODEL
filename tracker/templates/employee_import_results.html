@@ -49,10 +49,41 @@
   <span>
     Successfully processed <strong>{{ created_count }}</strong> new employee{{ created_count|pluralize }}
     and <strong>{{ updated_count }}</strong> update{{ updated_count|pluralize }}.
-    {% if created_count > 0 %}
-    New employees without an explicit password were assigned the default password <code>ChangeMe@123</code>.
+{% if created_count > 0 and generated_passwords %}
+    New employees without an explicit password were assigned a secure random password.
     {% endif %}
   </span>
+</div>
+{% endif %}
+
+{% if generated_passwords %}
+<div class="table-card mb-4">
+  <div class="table-header" style="background-color: #fff3e0;">
+    <h6><i class="bi bi-key me-1 text-warning"></i>Generated Passwords</h6>
+  </div>
+  <div class="p-3 bg-light border-bottom">
+    <small class="text-muted"><i class="bi bi-exclamation-circle me-1"></i><strong>Please securely copy these now.</strong> They will not be shown again.</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Temporary Password</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pw in generated_passwords %}
+        <tr>
+          <td>{{ pw.name }}</td>
+          <td><code>{{ pw.username }}</code></td>
+          <td><code class="user-select-all px-2 py-1 bg-light border rounded">{{ pw.password }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 

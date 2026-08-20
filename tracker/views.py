@@ -9,6 +9,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User as AuthUser
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -35,8 +36,6 @@ from .models import (
     Task,
     TaskChecklist,
 )
-
-from django.contrib.auth.models import User as AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -1278,6 +1277,7 @@ def import_employees_csv(request):
     created_count = 0
     updated_count = 0
     error_rows = []
+    generated_passwords = []
 
     for row_num, row in enumerate(reader, start=2):  # row 1 = header
         try:
@@ -1382,7 +1382,12 @@ def import_employees_csv(request):
                                 user.set_password(password)
                                 user.save()
                         except AuthUser.DoesNotExist:
-                            actual_pw = password if (password and password != '********') else 'ChangeMe@123'
+                            if password and password != '********':
+                                actual_pw = password
+                            else:
+                                actual_pw = AuthUser.objects.make_random_password(length=12)
+                                generated_passwords.append({'name': name or username, 'username': username, 'password': actual_pw})
+
                             user = AuthUser.objects.create_user(
                                 username=username,
                                 password=actual_pw,
@@ -1415,6 +1420,7 @@ def import_employees_csv(request):
         'created_count': created_count,
         'updated_count': updated_count,
         'error_rows': error_rows,
+        'generated_passwords': generated_passwords,
         'total_processed': created_count + updated_count + len(error_rows),
     }
     return render(request, 'employee_import_results.html', context)

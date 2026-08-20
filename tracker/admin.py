@@ -264,7 +264,10 @@ class EmployeeResource(resources.ModelResource):
                     user.set_password(password)
                     user.save()
             except User.DoesNotExist:
-                actual_pw = password if (password and password != '********') else 'ChangeMe@123'
+                if password and password != '********':
+                    actual_pw = password
+                else:
+                    actual_pw = User.objects.make_random_password(length=12)
                 user = User.objects.create_user(
                     username=username,
                     password=actual_pw,

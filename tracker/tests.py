@@ -1334,3 +1334,84 @@ class EmployeeAnalyticsTests(TestCase):
         dev_data = next(role for role in role_breakdown if role['designation'] == "Dev")
         self.assertEqual(dev_data['headcount'], 2)
         self.assertEqual(dev_data['avg_load'], 2.0)
+
+# =============================================================================
+# Employee Import / Export Tests
+# =============================================================================
+
+class EmployeeImportExportTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.hr_user = User.objects.create_user(username="hr_imp", password="password", is_superuser=False)
+        self.hr = create_test_employee(name="HR Manager", employee_id="HR-IMP", user=self.hr_user, email="hr@imp.com")
+        self.hr.permissions.can_manage_employees = True
+        self.hr.permissions.save()
+
+        self.emp_user = User.objects.create_user(username="emp_imp", password="password", is_superuser=False)
+        self.emp = create_test_employee(name="Basic Employee", employee_id="EMP-IMP", user=self.emp_user, email="emp@imp.com")
+        self.emp.permissions.can_manage_employees = False
+        self.emp.permissions.save()
+
+    def test_low_privilege_user_gets_403(self):
+        self.client.login(username="emp_imp", password="password")
+
+        # Test Export
+        resp_export = self.client.get('/dashboard/employees/export/')
+        self.assertEqual(resp_export.status_code, 403)
+
+        # Test Import
+        resp_import = self.client.post('/dashboard/employees/import/', {})
+        self.assertEqual(resp_import.status_code, 403)
+
+    def test_exported_csv_masks_password(self):
+        self.client.login(username="hr_imp", password="password")
+        resp = self.client.get('/dashboard/employees/export/')
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+
+        # The header has password, but the values should be '********'
+        self.assertIn('password', content)
+        self.assertIn('********', content)
+
+    def test_import_csv_new_user_with_random_password(self):
+        self.client.login(username="hr_imp", password="password")
+        csv_content = (
+            "employee_id,name,username,password,email\n"
+            "NEW-001,New User,newuser,,newuser@cysd.org\n"
+        )
+        csv_file = SimpleUploadedFile("test.csv", csv_content.encode('utf-8'), content_type="text/csv")
+
+        resp = self.client.post('/dashboard/employees/import/', {'csv_file': csv_file})
+        self.assertEqual(resp.status_code, 200)
+
+        # Verify new user was created
+        new_emp = Employee.objects.get(employee_id="NEW-001")
+        self.assertIsNotNone(new_emp.user)
+        self.assertEqual(new_emp.user.username, "newuser")
+
+        # Check that it generated a random password and showed it in context
+        self.assertIn('generated_passwords', resp.context)
+        gen_pwds = resp.context['generated_passwords']
+        self.assertEqual(len(gen_pwds), 1)
+        self.assertEqual(gen_pwds[0]['username'], "newuser")
+
+        # Check authentication with generated password
+        from django.contrib.auth import authenticate
+        auth_user = authenticate(username="newuser", password=gen_pwds[0]['password'])
+        self.assertIsNotNone(auth_user)
+
+    def test_import_csv_keep_existing_password(self):
+        self.client.login(username="hr_imp", password="password")
+        csv_content = (
+            "employee_id,name,username,password,email\n"
+            "HR-IMP,HR Manager,hr_imp,********,hr@imp.com\n"
+        )
+        csv_file = SimpleUploadedFile("test.csv", csv_content.encode('utf-8'), content_type="text/csv")
+
+        resp = self.client.post('/dashboard/employees/import/', {'csv_file': csv_file})
+        self.assertEqual(resp.status_code, 200)
+
+        # The password should still be 'password'
+        from django.contrib.auth import authenticate
+        auth_user = authenticate(username="hr_imp", password="password")
+        self.assertIsNotNone(auth_user)
