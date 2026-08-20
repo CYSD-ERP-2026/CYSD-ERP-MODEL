@@ -135,6 +135,12 @@ DATABASES = {
     'default': env.db('DATABASE_URL', default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'))
 }
 
+# Allow Docker-compose overrides
+if env('POSTGRES_HOST', default=None):
+    DATABASES['default']['HOST'] = env('POSTGRES_HOST')
+if env('POSTGRES_PORT', default=None):
+    DATABASES['default']['PORT'] = env('POSTGRES_PORT')
+
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------

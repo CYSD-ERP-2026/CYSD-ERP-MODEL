@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 
+
 def main():
     # 1. Start moto_server in the background
     moto_proc = subprocess.Popen(["moto_server", "-p", "5000"])
