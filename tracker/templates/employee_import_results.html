@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Import Results{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h4><i class="bi bi-check2-circle me-2"></i>Employee Import Results</h4>
+    <span class="meta">Summary of the CSV import operation</span>
+  </div>
+  <a href="{% url 'tracker:employees' %}" class="btn btn-export">
+    <i class="bi bi-arrow-left me-1"></i> Back to Employees
+  </a>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-md-3">
+    <div class="table-card p-3 text-center">
+      <div class="text-muted small text-uppercase mb-1">Total Processed</div>
+      <div class="fs-3 fw-bold text-dark">{{ total_processed }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="table-card p-3 text-center">
+      <div class="text-muted small text-uppercase mb-1">Created</div>
+      <div class="fs-3 fw-bold" style="color:#2e7d32;">{{ created_count }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="table-card p-3 text-center">
+      <div class="text-muted small text-uppercase mb-1">Updated</div>
+      <div class="fs-3 fw-bold" style="color:#1565c0;">{{ updated_count }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="table-card p-3 text-center">
+      <div class="text-muted small text-uppercase mb-1">Errors</div>
+      <div class="fs-3 fw-bold" style="color:{% if error_rows %}#c62828{% else %}#9e9e9e{% endif %};">
+        {{ error_rows|length }}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if created_count or updated_count %}
+<div class="alert d-flex align-items-center gap-2 mb-3"
+     style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:.65rem;color:#065f46;font-size:.87rem;">
+  <i class="bi bi-check-circle-fill fs-5 flex-shrink-0" style="color:#10b981;"></i>
+  <span>
+    Successfully processed <strong>{{ created_count }}</strong> new employee{{ created_count|pluralize }}
+    and <strong>{{ updated_count }}</strong> update{{ updated_count|pluralize }}.
+    {% if created_count > 0 %}
+    New employees without an explicit password were assigned the default password <code>ChangeMe@123</code>.
+    {% endif %}
+  </span>
+</div>
+{% endif %}
+
+{% if error_rows %}
+<div class="table-card">
+  <div class="table-header">
+    <h6><i class="bi bi-exclamation-triangle me-1 text-danger"></i>Errors ({{ error_rows|length }})</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-borderless table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width:80px;">Row #</th>
+          <th style="width:180px;">Employee ID</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for err in error_rows %}
+        <tr>
+          <td><span class="badge bg-danger-subtle text-danger rounded-pill">{{ err.row }}</span></td>
+          <td><code class="px-2 py-1 bg-light rounded text-dark" style="font-size:.8rem;">{{ err.employee_id|default:"—" }}</code></td>
+          <td class="text-danger" style="font-size:.87rem;">{{ err.error }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

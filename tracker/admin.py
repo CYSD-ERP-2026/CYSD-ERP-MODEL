@@ -16,8 +16,9 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from import_export import resources
+from import_export import fields, resources
 from import_export.admin import ImportExportModelAdmin
+from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.import_export.forms import ExportForm, ImportForm
 
@@ -181,11 +182,96 @@ class EmployeePermissionInline(TabularInline):
 
 
 class EmployeeResource(resources.ModelResource):
+    """
+    Enhanced import/export resource that adds virtual ``username`` and
+    ``password`` columns and properly resolves M2M domains and the
+    self-referential supervisor FK.
+
+    Import behaviour:
+    • If a ``username`` is provided, a Django ``User`` is created (or
+      updated) and linked to the employee.
+    • If ``password`` is provided (and is not the masked placeholder),
+      the user's password is set to that value.
+    • ``domains`` accepts pipe-separated domain names (e.g. "Education|Health").
+    • ``supervisor`` is looked up by ``employee_id``.
+
+    Export behaviour:
+    • ``username`` → the linked user's username (or blank).
+    • ``password`` → always ``"********"`` (hashed passwords cannot be exported).
+    """
+
+    username = fields.Field(column_name='username')
+    password = fields.Field(column_name='password')
+    domains = fields.Field(
+        column_name='domains',
+        attribute='domains',
+        widget=ManyToManyWidget(Domain, separator='|', field='name'),
+    )
+    supervisor = fields.Field(
+        column_name='supervisor',
+        attribute='supervisor',
+        widget=ForeignKeyWidget(Employee, field='employee_id'),
+    )
+
     class Meta:
         model = Employee
         import_id_fields = ('employee_id',)
         skip_unchanged = True
         report_skipped = True
+        fields = (
+            'employee_id', 'name', 'username', 'password',
+            'email', 'phone', 'designation', 'employment_type',
+            'gender', 'date_of_birth', 'date_joined',
+            'domains', 'supervisor', 'is_active', 'address', 'notes',
+        )
+        export_order = fields
+
+    # ── Export helpers ────────────────────────────────────────────────────
+    def dehydrate_username(self, employee):
+        return employee.user.username if employee.user else ''
+
+    def dehydrate_password(self, employee):
+        return '********'
+
+    # ── Import hook: create / update linked User ─────────────────────────
+    def after_save_instance(self, instance, row, **kwargs):
+        username = row.get('username', '').strip()
+        password = row.get('password', '').strip()
+
+        if not username:
+            return
+
+        if instance.user:
+            # Update existing linked user
+            user = instance.user
+            changed = False
+            if user.username != username:
+                user.username = username
+                changed = True
+            if password and password != '********':
+                user.set_password(password)
+                changed = True
+            if user.email != instance.email:
+                user.email = instance.email
+                changed = True
+            if changed:
+                user.save()
+        else:
+            # Create or link a user account
+            try:
+                user = User.objects.get(username=username)
+                if password and password != '********':
+                    user.set_password(password)
+                    user.save()
+            except User.DoesNotExist:
+                actual_pw = password if (password and password != '********') else 'ChangeMe@123'
+                user = User.objects.create_user(
+                    username=username,
+                    password=actual_pw,
+                    email=instance.email,
+                )
+            instance.user = user
+            instance.save(update_fields=['user'])
 
 
 @admin.register(Employee)

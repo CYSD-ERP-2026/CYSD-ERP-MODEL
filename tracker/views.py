@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import logging
 from datetime import timedelta
@@ -34,6 +35,8 @@ from .models import (
     Task,
     TaskChecklist,
 )
+
+from django.contrib.auth.models import User as AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -1174,3 +1177,245 @@ def employee_analytics_view(request):
         'scope': scope,
     }
     return render(request, 'employee_analytics.html', context)
+
+
+# =============================================================================
+# Employee Bulk Import / Export
+# =============================================================================
+
+@login_required
+def export_employees_csv(request):
+    """
+    Export all employees as a CSV download.
+
+    Includes ``username`` from the linked Django User and a masked
+    ``password`` placeholder (hashed passwords cannot be reversed).
+    Permission: superuser or ``can_manage_employees``.
+    """
+    profile, perms = _get_profile_and_perms(request)
+    if not request.user.is_superuser and (not perms or not perms.can_manage_employees):
+        return HttpResponseForbidden("You do not have permission to export employees.")
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="employees_export.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'employee_id', 'name', 'username', 'password',
+        'email', 'phone', 'designation', 'employment_type',
+        'gender', 'date_of_birth', 'date_joined',
+        'domains', 'supervisor', 'is_active', 'address', 'notes',
+    ])
+
+    employees = (
+        Employee.objects
+        .select_related('user', 'supervisor')
+        .prefetch_related('domains')
+        .order_by('employee_id')
+    )
+
+    for emp in employees:
+        writer.writerow([
+            emp.employee_id,
+            emp.name,
+            emp.user.username if emp.user else '',
+            '********',
+            emp.email,
+            emp.phone,
+            emp.designation,
+            emp.employment_type,
+            emp.gender,
+            emp.date_of_birth.strftime('%Y-%m-%d') if emp.date_of_birth else '',
+            emp.date_joined.strftime('%Y-%m-%d') if emp.date_joined else '',
+            '|'.join(d.name for d in emp.domains.all()),
+            emp.supervisor.employee_id if emp.supervisor else '',
+            'TRUE' if emp.is_active else 'FALSE',
+            emp.address,
+            emp.notes,
+        ])
+
+    return response
+
+
+@login_required
+@require_http_methods(["POST"])
+def import_employees_csv(request):
+    """
+    Bulk import / update employees from an uploaded CSV file.
+
+    For each row:
+    • If ``employee_id`` matches an existing record → update it.
+    • Otherwise → create a new employee.
+    • If ``username`` is provided, a Django ``User`` is created (or updated)
+      and linked to the employee.
+    • ``password`` sets the user's password (ignored if ``"********"``).
+    • ``domains`` is pipe-separated (e.g. ``"Education|Health"``).
+    • ``supervisor`` is matched by ``employee_id``.
+
+    Permission: superuser or ``can_manage_employees``.
+    """
+    profile, perms = _get_profile_and_perms(request)
+    if not request.user.is_superuser and (not perms or not perms.can_manage_employees):
+        return HttpResponseForbidden("You do not have permission to import employees.")
+
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        messages.error(request, 'No file was uploaded.')
+        return redirect('tracker:employees')
+
+    if not csv_file.name.lower().endswith('.csv'):
+        messages.error(request, 'Please upload a .csv file.')
+        return redirect('tracker:employees')
+
+    try:
+        decoded = csv_file.read().decode('utf-8-sig')
+    except UnicodeDecodeError:
+        messages.error(request, 'Could not decode the file. Please ensure it is UTF-8 encoded.')
+        return redirect('tracker:employees')
+
+    reader = csv.DictReader(io.StringIO(decoded))
+
+    created_count = 0
+    updated_count = 0
+    error_rows = []
+
+    for row_num, row in enumerate(reader, start=2):  # row 1 = header
+        try:
+            with transaction.atomic():
+                employee_id = row.get('employee_id', '').strip()
+                if not employee_id:
+                    error_rows.append({'row': row_num, 'employee_id': '', 'error': 'Missing employee_id'})
+                    continue
+
+                # ── Fetch or init ────────────────────────────────────────
+                try:
+                    emp = Employee.objects.get(employee_id=employee_id)
+                    is_new = False
+                except Employee.DoesNotExist:
+                    emp = Employee(employee_id=employee_id)
+                    is_new = True
+
+                # ── Scalar fields ────────────────────────────────────────
+                name = row.get('name', '').strip()
+                if name:
+                    emp.name = name
+                elif is_new:
+                    error_rows.append({'row': row_num, 'employee_id': employee_id, 'error': 'Missing name for new employee'})
+                    continue
+
+                email = row.get('email', '').strip()
+                if email:
+                    emp.email = email
+                elif is_new:
+                    error_rows.append({'row': row_num, 'employee_id': employee_id, 'error': 'Missing email for new employee'})
+                    continue
+
+                designation = row.get('designation', '').strip()
+                if designation:
+                    emp.designation = designation
+                elif is_new:
+                    emp.designation = 'Not specified'
+
+                phone = row.get('phone', '').strip()
+                if phone:
+                    emp.phone = phone
+
+                emp_type = row.get('employment_type', '').strip()
+                if emp_type:
+                    emp.employment_type = emp_type
+
+                gender = row.get('gender', '').strip()
+                if gender:
+                    emp.gender = gender
+
+                dob = row.get('date_of_birth', '').strip()
+                if dob:
+                    emp.date_of_birth = dob
+
+                dj = row.get('date_joined', '').strip()
+                if dj:
+                    emp.date_joined = dj
+
+                is_active_str = row.get('is_active', '').strip().upper()
+                if is_active_str:
+                    emp.is_active = is_active_str in ('TRUE', '1', 'YES')
+
+                address = row.get('address', '').strip()
+                if address:
+                    emp.address = address
+
+                notes = row.get('notes', '').strip()
+                if notes:
+                    emp.notes = notes
+
+                # ── Supervisor (by employee_id) ──────────────────────────
+                sup_id = row.get('supervisor', '').strip()
+                if sup_id:
+                    try:
+                        emp.supervisor = Employee.objects.get(employee_id=sup_id)
+                    except Employee.DoesNotExist:
+                        pass  # silently skip unresolvable supervisor
+
+                # ── User credentials ─────────────────────────────────────
+                username = row.get('username', '').strip()
+                password = row.get('password', '').strip()
+
+                if username:
+                    if emp.user:
+                        user = emp.user
+                        changed = False
+                        if user.username != username:
+                            user.username = username
+                            changed = True
+                        if password and password != '********':
+                            user.set_password(password)
+                            changed = True
+                        if user.email != emp.email:
+                            user.email = emp.email
+                            changed = True
+                        if changed:
+                            user.save()
+                    else:
+                        try:
+                            user = AuthUser.objects.get(username=username)
+                            if password and password != '********':
+                                user.set_password(password)
+                                user.save()
+                        except AuthUser.DoesNotExist:
+                            actual_pw = password if (password and password != '********') else 'ChangeMe@123'
+                            user = AuthUser.objects.create_user(
+                                username=username,
+                                password=actual_pw,
+                                email=emp.email,
+                            )
+                        emp.user = user
+
+                emp.save()
+
+                # ── M2M: domains ─────────────────────────────────────────
+                domains_str = row.get('domains', '').strip()
+                if domains_str:
+                    domain_names = [d.strip() for d in domains_str.split('|') if d.strip()]
+                    matching_domains = Domain.objects.filter(name__in=domain_names)
+                    emp.domains.set(matching_domains)
+
+                if is_new:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+        except Exception as exc:
+            error_rows.append({
+                'row': row_num,
+                'employee_id': row.get('employee_id', ''),
+                'error': str(exc),
+            })
+
+    context = {
+        'created_count': created_count,
+        'updated_count': updated_count,
+        'error_rows': error_rows,
+        'total_processed': created_count + updated_count + len(error_rows),
+    }
+    return render(request, 'employee_import_results.html', context)
+
