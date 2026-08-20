@@ -16,6 +16,9 @@ RUN pip install gunicorn
 
 COPY . /app/
 
+# Provide dummy secrets so Django settings load during collectstatic
+ENV DJANGO_SECRET_KEY=dummy-secret-key-for-build
+ENV DJANGO_DEBUG=False
 RUN python manage.py collectstatic --noinput
 
 RUN useradd -m appuser \
